@@ -13,6 +13,7 @@ LogHelper LogHelper::g_Instance;
 
 LogHelper::LogHelper()
 	: m_nLineCount(0)
+	, m_nArrayCount(0)
 	, m_bPause(false)
 {
 }
@@ -1142,9 +1143,8 @@ void LogHelper::GetPascalString(LPCSTR pStr, std::wstring& result)
 		WCHAR *pNewStr = (WCHAR*)malloc((nLen + 1) * sizeof(WCHAR));
 		if (pNewStr)
 		{
-			MultiByteToWideChar(CP_ACP, 0, pStr + 1, nLen, pNewStr, nLen);
-			pNewStr[0] = (WCHAR)nLen;
-			pNewStr[nLen + 1] = __Xc('\0');
+			MultiByteToWideChar(CP_ACP, 0, &pStr[1], nLen, pNewStr, nLen);
+			pNewStr[nLen] = __Xc('\0');
 			result = pNewStr;
 			free(pNewStr);
 		}
@@ -1179,11 +1179,12 @@ void LogHelper::OpenLogFile()
 	stream << std::put_time(&timeinfo, __X("%Y%m%d_%H%M%S"));
 
 	m_sLogPath += __X("\\xllhook\\");
-	m_sLogPath += stream.str();
-
 	::CreateDirectoryW(m_sLogPath.c_str(), NULL);
-	m_sLogFile = m_sLogPath + __X("\\api.csv");
 
+	m_sLogPath += stream.str();
+	::CreateDirectoryW(m_sLogPath.c_str(), NULL);
+
+	m_sLogFile = m_sLogPath + __X("\\api.csv");
 	m_fileStream.open(m_sLogFile.c_str(), std::wfstream::out);
 	m_fileStream.imbue(std::locale(""));
 	PrintLogTitle();
@@ -1200,7 +1201,6 @@ void LogHelper::PrintLogTitle()
 	if (!m_fileStream.is_open())
 		return;
 
-	m_mutex.lock();
 	static const WCHAR sPreFix[]
 		= __X("FuncAttr,FuncName,FuncRes,ResType,ResValue");
 	m_fileStream << sPreFix;
@@ -1211,7 +1211,6 @@ void LogHelper::PrintLogTitle()
 			<< __X(",Value") << i;
 	}
 	m_fileStream << std::endl;
-	m_mutex.unlock();
 }
 
 void LogHelper::PrintBuffer(LogBuffer& buffer)
@@ -1220,7 +1219,7 @@ void LogHelper::PrintBuffer(LogBuffer& buffer)
 	if (!m_fileStream.is_open())
 		return;
 
-	m_mutex.lock();
+	m_logFileMutex.lock();
 	const WCHAR chSep = __Xc(',');
 	m_fileStream << buffer.sFuncAttr
 		<< chSep << buffer.sFuncName
@@ -1237,9 +1236,9 @@ void LogHelper::PrintBuffer(LogBuffer& buffer)
 	}
 
 	m_fileStream << std::endl;
-	m_mutex.unlock();
+	m_logFileMutex.unlock();
 
-	buffer.clear();
+// 	buffer.clear();
 }
 
 void LogHelper::LogLPenHelperBegin(int wCode, void* lpv, LogBuffer& buffer)

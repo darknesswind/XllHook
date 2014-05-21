@@ -3,8 +3,10 @@ LIBRARY XllHook.xll
 EXPORTS
 	xlAutoOpen
 	xlAutoClose
+	xlAutoRegister
 	xlAutoRegister12
 	xlAutoAdd
 	xlAutoRemove
+	xlAddInManagerInfo
 	xlAddInManagerInfo12
 	XllHookDummy

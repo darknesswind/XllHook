@@ -68,11 +68,11 @@ FARPROC __stdcall Mine_GetProcAddress(HMODULE hModule, LPCSTR lpProcName);
 
 ProcMdCallBack MdCallBack = NULL;
 ProcMdCallBack12 MdCallBack12 = NULL;
-ProcLPenHelper _LPenHelper = NULL;
+Proc_LPenHelper _LPenHelper = NULL;
 
 ProcMdCallBack Real_MdCallBack = NULL;
 ProcMdCallBack12 Real_MdCallBack12 = NULL;
-ProcLPenHelper Real__LPenHelper = NULL;
+Proc_LPenHelper Real__LPenHelper = NULL;
 
 #define Trace printf
 BOOL WINAPI DllMain(
@@ -411,8 +411,7 @@ LONG AttachDetours(VOID)
 {
 	Real_MdCallBack = MdCallBack = (ProcMdCallBack)DetourFindFunction("EXCEL.EXE", Excel_MdCallBack);
 	Real_MdCallBack12 = MdCallBack12 = (ProcMdCallBack12)DetourFindFunction("EXCEL.EXE", Excel_MdCallBack12);
-	Real__LPenHelper = _LPenHelper = (ProcLPenHelper)DetourFindFunction("EXCEL.EXE", Excel_LPenHelper);
-
+	Real__LPenHelper = _LPenHelper = (Proc_LPenHelper)DetourFindFunction("EXCEL.EXE", Excel_LPenHelper);
 	DetourTransactionBegin();
 	DetourUpdateThread(GetCurrentThread());
 
@@ -420,9 +419,12 @@ LONG AttachDetours(VOID)
 	DetourSetIgnoreTooSmall(TRUE);
 
 // 	ATTACH(GetProcAddress);
-	ATTACH(MdCallBack);
-	ATTACH(MdCallBack12);
-	ATTACH(_LPenHelper);
+	if (MdCallBack)
+		ATTACH(MdCallBack);
+	if (MdCallBack12)
+		ATTACH(MdCallBack12);
+	if (_LPenHelper)
+		ATTACH(_LPenHelper);
 
 	if (DetourTransactionCommit() != NO_ERROR) {
 		OutputDebugStringA("AttachDetours failed on DetourTransactionCommit\n");
@@ -449,9 +451,12 @@ LONG DetachDetours(VOID)
 	DetourSetIgnoreTooSmall(TRUE);
 
 // 	DETACH(GetProcAddress);
-	DETACH(MdCallBack);
-	DETACH(MdCallBack12);
-	DETACH(_LPenHelper);
+	if (MdCallBack)
+		DETACH(MdCallBack);
+	if (MdCallBack12)
+		DETACH(MdCallBack12);
+	if (_LPenHelper)
+		DETACH(_LPenHelper);
 
 	if (DetourTransactionCommit() != 0) {
 		PVOID *ppbFailedPointer = NULL;

@@ -105,7 +105,9 @@ protected:
 
 private:
 	UINT64 m_nLineCount;
-	std::mutex	m_mutex;
+	UINT m_nArrayCount;
+	std::mutex	m_logFileMutex;
+	std::mutex	m_arrayMutex;
 	bool m_bPause;
 
 	std::wstring m_sLogPath;

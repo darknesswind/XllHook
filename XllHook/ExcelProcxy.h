@@ -12,11 +12,11 @@
 
 typedef int (PASCAL *ProcMdCallBack) (int xlfn, int coper, LPXLOPER *rgpxloper, LPXLOPER xloperRes);
 typedef int (PASCAL *ProcMdCallBack12) (int xlfn, int coper, LPXLOPER12 *rgpxloper12, LPXLOPER12 xloper12Res);
-typedef int (PASCAL *ProcLPenHelper) (int wCode, void* lpv);
+typedef int (PASCAL *Proc_LPenHelper) (int wCode, void* lpv);
 
 extern ProcMdCallBack Real_MdCallBack;
 extern ProcMdCallBack12 Real_MdCallBack12;
-extern ProcLPenHelper Real__LPenHelper;
+extern Proc_LPenHelper Real__LPenHelper;
 
 int PASCAL Mine_MdCallBack(int xlfn, int coper, LPXLOPER *rgpxloper, LPXLOPER xloperRes);
 int PASCAL Mine_MdCallBack12(int xlfn, int coper, LPXLOPER12 *rgpxloper12, LPXLOPER12 xloper12Res);

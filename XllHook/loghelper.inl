@@ -167,8 +167,6 @@ void LogHelper::LogXloperFlow(LPOperType lpOper, std::wstringstream& stream)
 template <class LPOperType>
 void LogHelper::LogOperArray(RW row, COL col, LPOperType lpArray, std::wstringstream& stream)
 {
-	static UINT g_arrayCount = 0;
-
 	stream << row << __Xc('x') << col;
 	if (!lpArray || row <= 0 || col <= 0)
 		return;
@@ -189,9 +187,12 @@ void LogHelper::LogOperArray(RW row, COL col, LPOperType lpArray, std::wstringst
 	}
 	else
 	{
-		++g_arrayCount;
-		stream << __X(" in Array") << g_arrayCount;
-		LogArrayToFile(row, col, lpArray, g_arrayCount);
+		m_arrayMutex.lock();
+		++m_nArrayCount;
+		m_arrayMutex.unlock();
+
+		stream << __X(" in Array") << m_nArrayCount;
+		LogArrayToFile(row, col, lpArray, m_nArrayCount);
 	}
 }
 
