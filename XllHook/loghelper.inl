@@ -182,7 +182,7 @@ void LogHelper::LogOperArray(RW row, COL col, LPOperType lpArray, std::wstringst
 			std::wstring sType;
 			std::wstring sVal;
 			LogXloper(&lpArray[i], sType, sVal);
-			stream << sType << __X(" {") << sVal << __Xc('}');
+			stream << __Xc(' ') << sType << __X("{") << sVal << __Xc('}');
 		}
 	}
 	else

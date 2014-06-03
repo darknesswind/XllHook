@@ -1141,13 +1141,13 @@ void LogHelper::GetPascalString(LPCSTR pStr, std::wstring& result)
 	{
 		UINT nLen = pStr[0];
 		WCHAR *pNewStr = (WCHAR*)malloc((nLen + 1) * sizeof(WCHAR));
-		if (pNewStr)
+		if (pNewStr && nLen > 0)
 		{
 			MultiByteToWideChar(CP_ACP, 0, &pStr[1], nLen, pNewStr, nLen);
 			pNewStr[nLen] = __Xc('\0');
 			result = pNewStr;
-			free(pNewStr);
 		}
+		free(pNewStr);
 	}
 }
 
@@ -1156,8 +1156,11 @@ void LogHelper::GetPascalString(LPCWSTR lpStr, std::wstring& result)
 	result.clear();
 	if (lpStr)
 	{
-		int nSize = *lpStr;
-		result.assign(lpStr, 1, nSize);
+		UINT nSize = *lpStr;
+		if (nSize > 0)
+		{
+			result.assign(lpStr, 1, nSize);
+		}
 	}
 }
 
@@ -1255,7 +1258,7 @@ void LogHelper::LogLPenHelperBegin(int wCode, void* lpv, LogBuffer& buffer)
 	buffer.argsOperValue[0] = stream.str();
 
 	stream.str(std::wstring());
-	stream << std::hex << lpv;
+	stream << std::hex << lpv << std::dec;
 	buffer.argsOperValue[1] = stream.str();
 }
 
