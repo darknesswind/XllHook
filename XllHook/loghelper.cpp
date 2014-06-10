@@ -1258,7 +1258,7 @@ void LogHelper::LogLPenHelperBegin(int wCode, void* lpv, LogBuffer& buffer)
 	buffer.argsOperValue[0] = stream.str();
 
 	stream.str(std::wstring());
-	stream << std::hex << lpv << std::dec;
+	stream << __X("0x") << std::hex << lpv << std::dec;
 	buffer.argsOperValue[1] = stream.str();
 }
 

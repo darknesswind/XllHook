@@ -123,7 +123,7 @@ void LogHelper::LogSingleRef(const XLRefType& sref, std::wstringstream& stream)
 template <class XLMRefType>
 void LogHelper::LogReferences(IDSHEET iSheet, const XLMRefType* lpmref, std::wstringstream& stream)
 {
-	stream << __X("Sheet(") << std::hex << iSheet << __X(")!");
+	stream << __X("Sheet(0x") << std::hex << iSheet << __X(")!") << std::dec;
 	if (lpmref)
 	{
 		for (int i = 0; i < lpmref->count; ++i)
@@ -146,7 +146,8 @@ void LogHelper::LogXloperFlow(LPOperType lpOper, std::wstringstream& stream)
 		stream << __X("Halt");
 		break;
 	case xlflowGoto:
-		stream << __X("Goto Sheet(") << std::hex << lpOper->val.flow.valflow.idSheet
+		stream << __X("Goto Sheet(0x") << std::hex
+			<< lpOper->val.flow.valflow.idSheet << std::dec
 			<< __Xc(")!R") << lpOper->val.flow.rw + 1
 			<< __Xc('C') << lpOper->val.flow.col + 1;
 		break;
