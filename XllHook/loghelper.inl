@@ -206,7 +206,7 @@ void LogHelper::LogArrayToFile(RW row, COL col, LPOperType lpArray, UINT id)
 	std::wfstream arrayStream;
 	{
 		WCHAR fullPath[MAX_PATH];
-		swprintf_s(fullPath, __X("%s\\array%i.csv"), m_sLogPath.c_str(), id);
+		swprintf_s(fullPath, __X("%s\\array%i.htm"), m_sLogPath.c_str(), id);
 
 		arrayStream.open(fullPath, std::wfstream::out);
 	}
@@ -214,27 +214,26 @@ void LogHelper::LogArrayToFile(RW row, COL col, LPOperType lpArray, UINT id)
 		return;
 
 	arrayStream.imbue(std::locale(""));
+	arrayStream << TableBegin << std::endl;
 
 	UINT nPos = 0;
 	for (RW r = 0; r < row; ++r)
 	{
+		arrayStream << RowBegin << std::endl;
 		for (COL c = 0; c < col; ++c)
 		{
 			std::wstring sType;
 			std::wstring sVal;
 			LogXloper(&lpArray[nPos], sType, sVal);
-			if (c > 0)
-				arrayStream << __Xc(',');
-
-			arrayStream << sType << __Xc(',') << sVal;
-
-			if (1 == row)
-				arrayStream << std::endl;
+			arrayStream << ColBegin << sType << __X("{")
+				<< sVal << __X("}") << ColEnd;
 
 			++nPos;
 		}
-		arrayStream << std::endl;
+		arrayStream << RowEnd << std::endl;
 		arrayStream.flush();
 	}
+
+	arrayStream << TableEnd;
 	arrayStream.close();
 }
