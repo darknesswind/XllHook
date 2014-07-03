@@ -1187,16 +1187,21 @@ void LogHelper::OpenLogFile()
 	m_sLogPath += stream.str();
 	::CreateDirectoryW(m_sLogPath.c_str(), NULL);
 
-	m_sLogFile = m_sLogPath + __X("\\api.csv");
+	m_sLogFile = m_sLogPath + __X("\\api.htm");
 	m_fileStream.open(m_sLogFile.c_str(), std::wfstream::out);
 	m_fileStream.imbue(std::locale(""));
+
+	m_fileStream << TableBegin << std::endl;
 	PrintLogTitle();
 }
 
 void LogHelper::CloseLogFile()
 {
 	if (m_fileStream.is_open())
+	{
+		m_fileStream << TableEnd;
 		m_fileStream.close();
+	}
 }
 
 void LogHelper::PrintLogTitle()
@@ -1204,16 +1209,19 @@ void LogHelper::PrintLogTitle()
 	if (!m_fileStream.is_open())
 		return;
 
-	static const WCHAR sPreFix[]
-		= __X("FuncAttr,FuncName,FuncRes,ResType,ResValue");
-	m_fileStream << sPreFix;
-
+	m_fileStream << RowBegin
+		<< ColBegin << __X("FuncAttr") << ColEnd
+		<< ColBegin << __X("FuncName") << ColEnd
+		<< ColBegin << __X("FuncRes") << ColEnd
+		<< ColBegin << __X("ResType") << ColEnd
+		<< ColBegin << __X("ResValue") << ColEnd;
 	for (UINT i = 1; i <= 30; ++i)
 	{
-		m_fileStream << __X(",Type") << i
-			<< __X(",Value") << i;
+		m_fileStream
+			<< ColBegin << __X("Type") << i << ColEnd
+			<< ColBegin << __X("Value") << i << ColEnd;
 	}
-	m_fileStream << std::endl;
+	m_fileStream << RowEnd << std::endl;
 }
 
 void LogHelper::PrintBuffer(LogBuffer& buffer)
@@ -1223,22 +1231,22 @@ void LogHelper::PrintBuffer(LogBuffer& buffer)
 		return;
 
 	m_logFileMutex.lock();
-	const WCHAR chSep = __Xc(',');
-	m_fileStream << buffer.sFuncAttr
-		<< chSep << buffer.sFuncName
-		<< chSep << buffer.sResult
-		<< chSep << buffer.sResOperType
-		<< chSep << buffer.sResOperValue;
+	m_fileStream << RowBegin
+		<< ColBegin << buffer.sFuncAttr << ColEnd
+		<< ColBegin << buffer.sFuncName << ColEnd
+		<< ColBegin << buffer.sResult << ColEnd
+		<< ColBegin << buffer.sResOperType << ColEnd
+		<< ColBegin << buffer.sResOperValue << ColEnd;
 
 	UINT nArgNum = min(buffer.argsOperType.size(), buffer.argsOperValue.size());
 	for (UINT i = 0; i < nArgNum; ++i)
 	{
 		m_fileStream
-			<< chSep << buffer.argsOperType[i]
-			<< chSep << buffer.argsOperValue[i];
+			<< ColBegin << buffer.argsOperType[i] << ColEnd
+			<< ColBegin << buffer.argsOperValue[i] << ColEnd;
 	}
 
-	m_fileStream << std::endl;
+	m_fileStream << RowEnd << std::endl;
 	m_logFileMutex.unlock();
 
 // 	buffer.clear();

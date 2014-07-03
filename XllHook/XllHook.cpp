@@ -7,6 +7,7 @@
 #include <cassert>
 #include "ExcelProcxy.h"
 #include "loghelper.h"
+#include "xlcall.h"
 
 BOOL ProcessAttach(HMODULE hDll);
 BOOL ProcessDetach(HMODULE hDll);
@@ -64,7 +65,11 @@ extern "C" {
 FARPROC(__stdcall *Real_GetProcAddress)(_In_ HMODULE hModule, _In_ LPCSTR lpProcName)
 	= GetProcAddress;
 
+SHORT(__stdcall *Real_GetAsyncKeyState)(_In_ int vKey)
+	= GetAsyncKeyState;
+
 FARPROC __stdcall Mine_GetProcAddress(HMODULE hModule, LPCSTR lpProcName);
+SHORT __stdcall Mine_GetAsyncKeyState(_In_ int vKey);
 
 ProcMdCallBack MdCallBack = NULL;
 ProcMdCallBack12 MdCallBack12 = NULL;
@@ -113,6 +118,7 @@ BOOL WINAPI DllMain(
 		ThreadDetach((HMODULE)hinst);
 		break;
 	}
+
 	return TRUE;
 }
 
@@ -425,6 +431,7 @@ LONG AttachDetours(VOID)
 		ATTACH(MdCallBack12);
 	if (_LPenHelper)
 		ATTACH(_LPenHelper);
+// 	ATTACH(GetAsyncKeyState);
 
 	if (DetourTransactionCommit() != NO_ERROR) {
 		OutputDebugStringA("AttachDetours failed on DetourTransactionCommit\n");
@@ -457,6 +464,7 @@ LONG DetachDetours(VOID)
 		DETACH(MdCallBack12);
 	if (_LPenHelper)
 		DETACH(_LPenHelper);
+// 	DETACH(GetAsyncKeyState);
 
 	if (DetourTransactionCommit() != 0) {
 		PVOID *ppbFailedPointer = NULL;
@@ -482,4 +490,15 @@ FARPROC __stdcall Mine_GetProcAddress(HMODULE hModule, LPCSTR lpProcName)
 		// 		_PrintExit("GetProcAddress(,) -> %p\n", rv);
 	};
 	return rv;
+}
+
+SHORT __stdcall Mine_GetAsyncKeyState(_In_ int vKey)
+{
+	SHORT res = Real_GetAsyncKeyState(vKey);
+	if (vKey == VK_CANCEL)
+	{
+		int i = 0;
+		++i;
+	}
+	return res;
 }

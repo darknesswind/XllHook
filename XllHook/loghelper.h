@@ -26,6 +26,13 @@
 #define FuncTypeMask (0xF000)
 #define XLOPER_TYPEMASK (unsigned short)(0xFFF)
 
+#define TableBegin __X("<table border=\"1\">")
+#define TableEnd __X("</table>")
+#define RowBegin __X("<tr>")
+#define RowEnd __X("</tr>")
+#define ColBegin __X("<td>")
+#define ColEnd __X("</td>")
+
 struct LogBuffer
 {
 	std::wstring sFuncAttr;

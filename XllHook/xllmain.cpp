@@ -110,7 +110,11 @@ __declspec(dllexport) LPXLOPER WINAPI xlAddInManagerInfo(LPXLOPER xAction)
 	if (xIntAction.val.w == 1)
 	{
 		xInfo.xltype = xltypeStr;
+#ifdef _DEBUG
+		xInfo.val.str = "\007!!!!!DBGHOOK";
+#else
 		xInfo.val.str = "\007!!!!!XLLHOOK";
+#endif
 	}
 	else
 	{
