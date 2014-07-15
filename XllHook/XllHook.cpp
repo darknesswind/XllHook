@@ -99,7 +99,7 @@ BOOL WINAPI DllMain(
 			s_hInst = (HMODULE)hinst;
 			DetourRestoreAfterWith();
 			ProcessAttach((HMODULE)hinst);
-			LogHelper::Instance().OpenLogFile();
+// 			LogHelper::Instance().OpenLogFile();
 		}
 		else
 		{
@@ -418,6 +418,12 @@ LONG AttachDetours(VOID)
 	Real_MdCallBack = MdCallBack = (ProcMdCallBack)DetourFindFunction("EXCEL.EXE", Excel_MdCallBack);
 	Real_MdCallBack12 = MdCallBack12 = (ProcMdCallBack12)DetourFindFunction("EXCEL.EXE", Excel_MdCallBack12);
 	Real__LPenHelper = _LPenHelper = (Proc_LPenHelper)DetourFindFunction("EXCEL.EXE", Excel_LPenHelper);
+	if (!MdCallBack && !MdCallBack12 && !_LPenHelper)
+	{
+		Real_MdCallBack = MdCallBack = (ProcMdCallBack)DetourFindFunction("et.EXE", Excel_MdCallBack);
+		Real_MdCallBack12 = MdCallBack12 = (ProcMdCallBack12)DetourFindFunction("et.EXE", Excel_MdCallBack12);
+		Real__LPenHelper = _LPenHelper = (Proc_LPenHelper)DetourFindFunction("et.EXE", Excel_LPenHelper);
+	}
 	DetourTransactionBegin();
 	DetourUpdateThread(GetCurrentThread());
 

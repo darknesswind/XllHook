@@ -15,6 +15,7 @@ LogHelper::LogHelper()
 	: m_nLineCount(0)
 	, m_nArrayCount(0)
 	, m_bPause(false)
+	, m_bFirstLog(true)
 {
 }
 
@@ -1139,7 +1140,7 @@ void LogHelper::GetPascalString(LPCSTR pStr, std::wstring& result)
 	result.clear();
 	if (pStr)
 	{
-		UINT nLen = pStr[0];
+		USHORT nLen = pStr[0];
 		WCHAR *pNewStr = (WCHAR*)malloc((nLen + 1) * sizeof(WCHAR));
 		if (pNewStr && nLen > 0)
 		{
@@ -1226,6 +1227,12 @@ void LogHelper::PrintLogTitle()
 
 void LogHelper::PrintBuffer(LogBuffer& buffer)
 {
+	if (m_bFirstLog)
+	{
+		OpenLogFile();
+		m_bFirstLog = false;
+	}
+
 	++m_nLineCount;
 	if (!m_fileStream.is_open())
 		return;

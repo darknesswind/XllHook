@@ -116,6 +116,7 @@ private:
 	std::mutex	m_logFileMutex;
 	std::mutex	m_arrayMutex;
 	bool m_bPause;
+	bool m_bFirstLog;
 
 	std::wstring m_sLogPath;
 	std::wstring m_sLogFile;
