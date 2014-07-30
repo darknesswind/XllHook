@@ -1,6 +1,7 @@
 #include "loghelper.h"
 #include <ShlObj.h>
 #include <ctime>
+#include <cassert>
 
 LogHelper LogHelper::g_Instance;
 
@@ -1140,12 +1141,13 @@ void LogHelper::GetPascalString(LPCSTR pStr, std::wstring& result)
 	result.clear();
 	if (pStr)
 	{
-		USHORT nLen = pStr[0];
-		WCHAR *pNewStr = (WCHAR*)malloc((nLen + 1) * sizeof(WCHAR));
-		if (pNewStr && nLen > 0)
+		UINT nLen = pStr[0];
+		UINT nNewLen = MultiByteToWideChar(CP_ACP, 0, pStr + 1, nLen, NULL, NULL);
+		WCHAR *pNewStr = (WCHAR*)malloc((nNewLen + 1) * sizeof(WCHAR));
+		if (pNewStr)
 		{
-			MultiByteToWideChar(CP_ACP, 0, &pStr[1], nLen, pNewStr, nLen);
-			pNewStr[nLen] = __Xc('\0');
+			MultiByteToWideChar(CP_ACP, 0, pStr + 1, nLen, pNewStr, nNewLen);
+			pNewStr[nNewLen] = __Xc('\0');
 			result = pNewStr;
 		}
 		free(pNewStr);
@@ -1237,6 +1239,9 @@ void LogHelper::PrintBuffer(LogBuffer& buffer)
 	if (!m_fileStream.is_open())
 		return;
 
+	if (m_fileStream.bad())
+		m_fileStream.clear();
+
 	m_logFileMutex.lock();
 	m_fileStream << RowBegin
 		<< ColBegin << buffer.sFuncAttr << ColEnd
@@ -1244,6 +1249,7 @@ void LogHelper::PrintBuffer(LogBuffer& buffer)
 		<< ColBegin << buffer.sResult << ColEnd
 		<< ColBegin << buffer.sResOperType << ColEnd
 		<< ColBegin << buffer.sResOperValue << ColEnd;
+	ASSERT(!m_fileStream.bad());
 
 	UINT nArgNum = min(buffer.argsOperType.size(), buffer.argsOperValue.size());
 	for (UINT i = 0; i < nArgNum; ++i)
@@ -1251,9 +1257,11 @@ void LogHelper::PrintBuffer(LogBuffer& buffer)
 		m_fileStream
 			<< ColBegin << buffer.argsOperType[i] << ColEnd
 			<< ColBegin << buffer.argsOperValue[i] << ColEnd;
+		ASSERT(!m_fileStream.bad());
 	}
 
 	m_fileStream << RowEnd << std::endl;
+	ASSERT(!m_fileStream.bad());
 	m_logFileMutex.unlock();
 
 // 	buffer.clear();

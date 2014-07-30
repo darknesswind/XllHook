@@ -145,7 +145,11 @@ __declspec(dllexport) LPXLOPER12 WINAPI xlAddInManagerInfo12(LPXLOPER12 xAction)
 	if (xIntAction.val.w == 1)
 	{
 		xInfo.xltype = xltypeStr;
-		xInfo.val.str = L"\007!!!!!XLLHOOK";
+#ifdef _DEBUG
+		xInfo.val.str = L"\014!!!!!DBGHOOK";
+#else
+		xInfo.val.str = L"\014!!!!!XLLHOOK";
+#endif
 	}
 	else
 	{
