@@ -9,4 +9,7 @@ EXPORTS
 	xlAutoRemove
 	xlAddInManagerInfo
 	xlAddInManagerInfo12
-	XllHookDummy
+	XllClearLog
+	XllOpenFolder
+	XllPauseLog
+	XllResumeLog

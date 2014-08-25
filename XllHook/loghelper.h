@@ -6,6 +6,7 @@
 #include <mutex>
 #include <windows.h>
 #include "xlcall.h"
+#include <map>
 
 #ifndef ASSERT
 #define ASSERT(x) assert(x)
@@ -43,7 +44,9 @@ struct LogBuffer
 	std::vector<std::wstring> argsOperType;
 	std::vector<std::wstring> argsOperValue;
 
-	LogBuffer()
+	int xlfn;
+	bool bPrintEnter;
+	LogBuffer() : xlfn(0), bPrintEnter(true)
 	{
 	}
 
@@ -59,11 +62,95 @@ struct LogBuffer
 	}
 };
 
+enum XlCallArgType
+{
+	xlArgNone = 0,
+	xlArgRetrun1 = 1,
+	xlArgRetrun2 = 2,
+	xlArgRetrun3 = 3,
+	xlArgRetrun4 = 4,
+	xlArgRetrun5 = 5,
+	xlArgRetrun6 = 6,
+	xlArgRetrun7 = 7,
+	xlArgRetrun8 = 8,
+	xlArgRetrun9 = 9,
+	// <= excel 2003
+	xlArgBool,		// A	bool
+	xlArgBoolRef,	// L	bool*
+	xlArgDouble,	// B	double
+	xlArgDoubleRef,	// E	double*
+	xlArgCStr,		// C	C风格字符串（\0结尾）
+	xlArgPascalStr,	// D	Pascal风格字符串(第一个字符为字符串长度)
+	xlArgUShort,	// H	unsigned short
+	xlArgShort,		// I	short
+	xlArgShortRef,	// M	short*
+	xlArgInt,		// J	int
+	xlArgIntRef,	// N	int*
+	xlArgFloatArr,	// K	结构体 _FP
+	xlArgArray,		// O	(ushort*, ushort*, double*)
+	xlArgOper,		// P	xltypeNum, xltypeStr, xltypeBool, xltypeErr, xltypeMulti, xltypeMissing, xltypeNil
+	xlArgXLOper,	// R	xltypeNum, xltypeStr, xltypeBool, xltypeErr, xltypeMulti, xltypeMissing, xltypeNil, xltypeRef, xltypeSRef
+	// >= excel 2007
+	xlArgCWStr,			// C%	Unicode C风格字符串
+	xlArgPascalWStr,	// D%	Unicode Pascal风格字符串
+	xlArgFloatArr12,// K%	结构体_FP12
+	xlArgArray12,	// O%	(int*, int*, double*)
+	xlArgOper12,	// Q	xltypeNum, xltypeStr, xltypeBool, xltypeErr, xltypeMulti, xltypeMissing, xltypeNil
+	xlArgXLOper12,	// U	xltypeNum, xltypeStr, xltypeBool, xltypeErr, xltypeMulti, xltypeMissing, xltypeNil, xltypeRef, xltypeSRef
+
+	xlArgBitVolatile = 0x100, // !	recalculates every time the worksheet recalculates
+	xlArgBitMacroFunc = 0x200,	// #	声明成R、U的类型会默认为可变的
+	xlArgBitThreadSafe = 0x400, // $	跟#不兼容
+	xlArgBitClusterSafe = 0x800, // &
+	xlArgBitInPlaceModify = 0x1000,
+
+	xlArgCStrInOut = xlArgCStr | xlArgBitInPlaceModify,			// F	原地编辑的C风格字符串
+	xlArgCWStrInOut = xlArgCWStr | xlArgBitInPlaceModify,			// F%	原地编辑的Unicode C风格字符串
+	xlArgPascalStrInOut = xlArgPascalStr | xlArgBitInPlaceModify,	// G	原地编辑的Pascal风格字符串
+	xlArgPascalWStrInOut = xlArgPascalWStr | xlArgBitInPlaceModify,	// G%	原地编辑的Unicode Pascal风格字符串
+};
+
+class ShellCode
+{
+public:
+	ShellCode(PVOID srcFunc = 0);
+	PVOID address();
+	void operator=(const ShellCode& other);
+
+private:
+	const static int m_size = 16;
+	char m_code[m_size];
+};
+
+struct XllFuncInfo
+{
+	void* pEntryPoint;
+	DWORD funcAttr;
+	XlCallArgType retrunType;
+	std::wstring funcName;
+
+	std::vector<XlCallArgType> argTypes;
+	XllFuncInfo()
+		: pEntryPoint(NULL)
+		, funcAttr(0)
+		, retrunType(xlArgNone)
+	{
+	}
+};
+
+union XlFuncResult
+{
+	double dbl;
+	DWORD dw;
+};
+
+typedef std::map<void*, XllFuncInfo> UDFMap;
+
 class LogHelper
 {
 public:
 	LogHelper();
-
+	~LogHelper();
 	static LogHelper& Instance() { return g_Instance; }
 
 	void OpenLogFile();
@@ -71,14 +158,21 @@ public:
 
 	void PauseLog() { m_bPause = true; }
 	void ResumeLog() { m_bPause = false; }
+	void ClearLog();
+	void OpenFolder();
 
 	template <class LPOperType>
-	void LogFunctionBegin(int xlfn, int coper, LPOperType *rgpxloper, LogBuffer& buffer);
+	void LogFunctionBegin(int xlfn, int coper, LPOperType *rgpxloper);
 	template <class LPOperType>
-	void LogFunctionEnd(int result, LPOperType xloperRes, LogBuffer& buffer);
+	void LogFunctionEnd(int result, LPOperType xloperRes);
 
-	void LogLPenHelperBegin(int wCode, void* lpv, LogBuffer& buffer);
-	void LogLPenHelperEnd(int result, LogBuffer& buffer);
+	void LogLPenHelperBegin(int wCode, void* lpv);
+	void LogLPenHelperEnd(int result);
+
+	void RegisterFunction(LogBuffer& buffer);
+	const UDFMap& GetUDFMap() const { return m_udfMap; }
+	void** LogUdfArgument(void* key, void** lpArgument);
+	void LogUdfEnd(void* key, XlFuncResult result);
 
 protected:
 	void GetXlFunctionName(int xlfn, std::wstring& str);
@@ -88,6 +182,7 @@ protected:
 	void GetXloperErrName(XLOPER_ERRTYPE type, std::wstring& str);
 	void GetPascalString(LPCSTR, std::wstring& result);
 	void GetPascalString(LPCWSTR, std::wstring& result);
+	BOOL LogHelper::WStrToStr(const std::wstring& wstr, std::string& str);
 
 	template <class LPOperType>
 	void LogXloper(LPOperType lpOper, std::wstring& sType, std::wstring& sVal);
@@ -108,24 +203,38 @@ protected:
 	void LogArrayToFile(RW row, COL col, LPOperType lpArray, UINT id);
 
 	void PrintLogTitle();
-	void PrintBuffer(LogBuffer& buffer);
+	void PrintTopBuffer(UINT deep);
+	void PrintEnterRow(const std::wstring& name);
+	void PrintLeaveRow(const std::wstring& name);
+
+	HRESULT ParseArgumentType(LPCWSTR lpArgType, XllFuncInfo& info);
+	XlCallArgType ParseVoidRet(WCHAR typeChar);
+	void GetUDFArgTypeName(XlCallArgType type, std::wstring& name);
+	DWORD GetUDFArgValue(XlCallArgType type, void** lparray, std::wstring& name);
 
 private:
 	UINT64 m_nLineCount;
 	UINT m_nArrayCount;
 	std::mutex	m_logFileMutex;
 	std::mutex	m_arrayMutex;
-	bool m_bPause;
+	int m_bPause;
 	bool m_bFirstLog;
 
 	std::wstring m_sLogPath;
 	std::wstring m_sLogFile;
 
 	std::wofstream m_fileStream;
+	UDFMap m_udfMap;
 
+	ShellCode* m_codes;
+	UINT m_nCodePos;
+	std::vector<LogBuffer> m_callstack;
+
+	static const UINT nMaxUDFuncNum = 5000;
 	static LogHelper g_Instance;
 };
 
+extern DWORD PASCAL UDFHook();
 #include "loghelper.inl"
 
 #endif

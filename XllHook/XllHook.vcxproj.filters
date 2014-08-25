@@ -38,6 +38,9 @@
     <ClInclude Include="ExcelProcxy.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="XllHook.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="XllHook.def" />

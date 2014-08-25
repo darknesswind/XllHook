@@ -2,6 +2,7 @@
 #include <ShlObj.h>
 #include <ctime>
 #include <cassert>
+#include "XllHook.h"
 
 LogHelper LogHelper::g_Instance;
 
@@ -15,9 +16,19 @@ LogHelper LogHelper::g_Instance;
 LogHelper::LogHelper()
 	: m_nLineCount(0)
 	, m_nArrayCount(0)
-	, m_bPause(false)
+	, m_bPause(0)
 	, m_bFirstLog(true)
 {
+	m_nCodePos = 0;
+	m_codes = (ShellCode*)VirtualAlloc(NULL,
+		nMaxUDFuncNum * sizeof(ShellCode),
+		MEM_COMMIT,
+		PAGE_EXECUTE_READWRITE);
+}
+
+LogHelper::~LogHelper()
+{
+	VirtualFree(m_codes, nMaxUDFuncNum * sizeof(ShellCode), MEM_RELEASE);
 }
 
 void LogHelper::GetXlFunctionName(int xlfn, std::wstring& str)
@@ -1141,7 +1152,7 @@ void LogHelper::GetPascalString(LPCSTR pStr, std::wstring& result)
 	result.clear();
 	if (pStr)
 	{
-		UINT nLen = pStr[0];
+		UINT nLen = (BYTE)pStr[0];
 		UINT nNewLen = MultiByteToWideChar(CP_ACP, 0, pStr + 1, nLen, NULL, NULL);
 		WCHAR *pNewStr = (WCHAR*)malloc((nNewLen + 1) * sizeof(WCHAR));
 		if (pNewStr)
@@ -1152,6 +1163,26 @@ void LogHelper::GetPascalString(LPCSTR pStr, std::wstring& result)
 		}
 		free(pNewStr);
 	}
+}
+
+BOOL LogHelper::WStrToStr(const std::wstring& wstr, std::string& str)
+{
+	str.clear();
+	UINT nLen = wstr.size();
+	UINT nNewLen = WideCharToMultiByte(CP_ACP, 0, wstr.c_str(), nLen, NULL, 0, NULL, NULL);
+	if (nNewLen > PascalStrMaxLen)
+		nNewLen = PascalStrMaxLen;
+
+	LPSTR pNewStr = (LPSTR)malloc((nNewLen + 1) * sizeof(char));
+	if (pNewStr)
+	{
+		WideCharToMultiByte(CP_ACP, 0, wstr.c_str(), nLen, pNewStr, nNewLen, NULL, NULL);
+		pNewStr[nNewLen] = '\0';
+		str = pNewStr;
+		free(pNewStr);
+		return TRUE;
+	}
+	return FALSE;
 }
 
 void LogHelper::GetPascalString(LPCWSTR lpStr, std::wstring& result)
@@ -1176,22 +1207,27 @@ void LogHelper::OpenLogFile()
 	::SHGetSpecialFolderPathW(NULL, pwszPath, CSIDL_MYDOCUMENTS, TRUE);
 	m_sLogPath = pwszPath;
 
-	time_t rawtime;
-	struct tm timeinfo;
+	std::wstring sTime;
+	if (sTime.empty())
+	{
+		time_t rawtime;
+		struct tm timeinfo;
 
-	time(&rawtime);
-	localtime_s(&timeinfo, &rawtime);
-	std::wstringstream stream;
-	stream << std::put_time(&timeinfo, __X("%Y%m%d_%H%M%S"));
+		time(&rawtime);
+		localtime_s(&timeinfo, &rawtime);
+		std::wstringstream stream;
+		stream << std::put_time(&timeinfo, __X("%Y%m%d_%H%M%S"));
+		sTime = stream.str();
+	}
 
 	m_sLogPath += __X("\\xllhook\\");
 	::CreateDirectoryW(m_sLogPath.c_str(), NULL);
 
-	m_sLogPath += stream.str();
+	m_sLogPath += sTime.c_str();
 	::CreateDirectoryW(m_sLogPath.c_str(), NULL);
 
 	m_sLogFile = m_sLogPath + __X("\\api.htm");
-	m_fileStream.open(m_sLogFile.c_str(), std::wfstream::out);
+	m_fileStream.open(m_sLogFile.c_str(), std::wfstream::out | std::wfstream::app);
 	m_fileStream.imbue(std::locale(""));
 
 	m_fileStream << TableBegin << std::endl;
@@ -1204,7 +1240,25 @@ void LogHelper::CloseLogFile()
 	{
 		m_fileStream << TableEnd;
 		m_fileStream.close();
+		m_bFirstLog = true;
 	}
+}
+
+void LogHelper::ClearLog()
+{
+	if (!m_fileStream.is_open())
+		return;
+	m_fileStream.close();
+	m_fileStream.open(m_sLogFile.c_str(), std::wfstream::out);
+	m_fileStream.imbue(std::locale(""));
+	m_fileStream << TableBegin << std::endl;
+	PrintLogTitle();
+}
+
+void LogHelper::OpenFolder()
+{
+	HINSTANCE res = ::ShellExecuteW(0, __X("open"), m_sLogPath.c_str(), NULL, NULL, SW_SHOW);
+	DWORD err = GetLastError();
 }
 
 void LogHelper::PrintLogTitle()
@@ -1227,7 +1281,7 @@ void LogHelper::PrintLogTitle()
 	m_fileStream << RowEnd << std::endl;
 }
 
-void LogHelper::PrintBuffer(LogBuffer& buffer)
+void LogHelper::PrintTopBuffer(UINT deep)
 {
 	if (m_bFirstLog)
 	{
@@ -1241,6 +1295,19 @@ void LogHelper::PrintBuffer(LogBuffer& buffer)
 
 	if (m_fileStream.bad())
 		m_fileStream.clear();
+
+	LogBuffer buffer;
+	std::swap(buffer, m_callstack.back());
+	m_callstack.pop_back();
+
+	if (!m_callstack.empty() && m_callstack.back().bPrintEnter)
+	{
+		m_callstack.back().bPrintEnter = false;
+		PrintEnterRow(m_callstack.back().sFuncName);
+		PrintTopBuffer(deep + 1);
+	}
+	if (deep > 0)
+		m_callstack.push_back(buffer);
 
 	m_logFileMutex.lock();
 	m_fileStream << RowBegin
@@ -1262,15 +1329,48 @@ void LogHelper::PrintBuffer(LogBuffer& buffer)
 
 	m_fileStream << RowEnd << std::endl;
 	ASSERT(!m_fileStream.bad());
+	if (m_fileStream.bad())
+		m_fileStream.clear();
+
 	m_logFileMutex.unlock();
 
+	if (!buffer.bPrintEnter && 0 == deep)
+		PrintLeaveRow(buffer.sFuncName);
 // 	buffer.clear();
 }
 
-void LogHelper::LogLPenHelperBegin(int wCode, void* lpv, LogBuffer& buffer)
+void LogHelper::PrintEnterRow(const std::wstring& name)
+{
+	m_logFileMutex.lock();
+	m_fileStream << RowBegin
+		<< ColBegin << __X("#Enter#") << ColEnd
+		<< ColBegin << __X("#Enter#") << ColEnd
+		<< ColBegin << name << ColEnd
+		<< ColBegin << __X("#Enter#") << ColEnd
+		<< RowEnd << std::endl;
+	m_logFileMutex.unlock();
+}
+
+void LogHelper::PrintLeaveRow(const std::wstring& name)
+{
+	m_logFileMutex.lock();
+	m_fileStream << RowBegin
+		<< ColBegin << __X("#Leave#") << ColEnd
+		<< ColBegin << __X("#Leave#") << ColEnd
+		<< ColBegin << name << ColEnd
+		<< ColBegin << __X("#Leave#") << ColEnd
+		<< RowEnd << std::endl;
+	m_logFileMutex.unlock();
+}
+
+void LogHelper::LogLPenHelperBegin(int wCode, void* lpv)
 {
 	if (m_bPause)
 		return;
+
+	m_callstack.push_back(LogBuffer());
+	LogBuffer& buffer = m_callstack.back();
+	buffer.xlfn = wCode;
 
 	buffer.sFuncName = __X("LPenHelper");
 	buffer.argsOperType.resize(2);
@@ -1285,12 +1385,563 @@ void LogHelper::LogLPenHelperBegin(int wCode, void* lpv, LogBuffer& buffer)
 	buffer.argsOperValue[1] = stream.str();
 }
 
-void LogHelper::LogLPenHelperEnd(int result, LogBuffer& buffer)
+void LogHelper::LogLPenHelperEnd(int result)
 {
 	if (m_bPause)
 		return;
 
+	LogBuffer& buffer = m_callstack.back();
+
 	std::wstringstream stream;
 	stream << result;
 	buffer.sResult = stream.str();
+	PrintTopBuffer(0);
+}
+
+void LogHelper::RegisterFunction(LogBuffer& buffer)
+{
+	if (m_nCodePos >= nMaxUDFuncNum)
+		return;
+
+	if (buffer.argsOperValue.size() < 3)
+		return;
+
+	const std::wstring& sModule = buffer.argsOperValue[0];
+	const std::wstring& sProcedure = buffer.argsOperValue[1];
+	const std::wstring& sTypeText = buffer.argsOperValue[2];
+
+	std::string sProc;
+	WStrToStr(sProcedure, sProc);
+	if (sProc.empty())
+		return;
+
+	HMODULE hModule = ::GetModuleHandleW(sModule.c_str());
+	ASSERT(hModule);
+
+	void* lpProc = ::GetProcAddress(hModule, sProc.c_str());
+	if (!lpProc && !sProc.empty())
+	{
+		WORD nExportID = atoi(sProc.c_str());
+		void* lpProc = ::GetProcAddress(hModule, (LPCSTR)nExportID);
+	}
+	if (!lpProc)
+		return;
+
+	if (m_udfMap.find(lpProc) != m_udfMap.end())
+		return;
+
+	XllFuncInfo& info = m_udfMap[lpProc];
+	HRESULT hr = ParseArgumentType(sTypeText.c_str(), info);
+	if (FAILED(hr))
+		return;
+
+// 	AttachFunction(&lpProc, (PVOID)UDFHook, &sProc[0]);
+
+	m_codes[m_nCodePos] = ShellCode(lpProc);
+	AttachFunction(&lpProc, m_codes[m_nCodePos].address(), &sProc[0]);
+	++m_nCodePos;
+	info.pEntryPoint = lpProc;
+	info.funcName = sProcedure;
+}
+
+#define RESOLUT_TYPE(xl11type, xl12type)\
+	if (__Xc('%') == *(lpArgType + 1))	\
+	{									\
+		++lpArgType;					\
+		curType = (xl12type);			\
+	}									\
+	else								\
+	{									\
+		curType = (xl11type);			\
+	}
+
+HRESULT LogHelper::ParseArgumentType(LPCWSTR lpArgType, XllFuncInfo& info)
+{
+	if (!lpArgType || 0 == lpArgType[0])
+		return E_INVALIDARG;
+
+	bool bReturnType = true;
+	while (lpArgType && __Xc('\0') != *lpArgType)
+	{
+		XlCallArgType curType = xlArgNone;
+		switch (*lpArgType)
+		{
+		case __Xc('A'): curType = xlArgBool; break;
+		case __Xc('L'): curType = xlArgBoolRef; break;
+		case __Xc('B'): curType = xlArgDouble; break;
+		case __Xc('E'): curType = xlArgDoubleRef; break;
+		case __Xc('C'):
+			RESOLUT_TYPE(xlArgCStr, xlArgCWStr);
+			break;
+		case __Xc('F'):
+			RESOLUT_TYPE(xlArgCStrInOut, xlArgCWStrInOut);
+			break;
+		case __Xc('D'):
+			RESOLUT_TYPE(xlArgPascalStr, xlArgPascalWStr);
+			break;
+		case __Xc('G'):
+			RESOLUT_TYPE(xlArgPascalStrInOut, xlArgPascalWStrInOut);
+			break;
+		case __Xc('H'): curType = xlArgUShort; break;
+		case __Xc('I'): curType = xlArgShort; break;
+		case __Xc('M'): curType = xlArgShortRef; break;
+		case __Xc('J'): curType = xlArgInt; break;
+		case __Xc('N'): curType = xlArgIntRef; break;
+		case __Xc('K'):
+			RESOLUT_TYPE(xlArgFloatArr, xlArgFloatArr12);
+			break;
+		case __Xc('O'):
+			RESOLUT_TYPE(xlArgArray, xlArgArray12);
+			break;
+		case __Xc('P'): curType = xlArgOper; break;
+		case __Xc('R'): curType = xlArgXLOper; break;
+		case __Xc('Q'): curType = xlArgOper12; break;
+		case __Xc('U'): curType = xlArgXLOper12; break;
+		case __Xc('!'): info.funcAttr |= xlArgBitVolatile; break;
+		case __Xc('#'): info.funcAttr |= xlArgBitMacroFunc; break;
+		case __Xc('$'): info.funcAttr |= xlArgBitThreadSafe; break;
+		case __Xc('&'): info.funcAttr |= xlArgBitClusterSafe; break;
+		default:
+			if (bReturnType)
+			{
+				curType = ParseVoidRet(*lpArgType);
+				if (xlArgNone != curType)
+					break;
+			}
+			return E_FAIL;
+		}
+
+		if (!bReturnType)
+		{
+			if (xlArgNone != curType)
+				info.argTypes.push_back(curType);
+		}
+		else
+		{
+			// 返回值不允许使用有3个参数的O类型
+			if (xlArgArray == curType || xlArgArray12 == curType)
+				return E_INVALIDARG;
+
+			info.retrunType = curType;
+			bReturnType = false;
+		}
+		++lpArgType;
+	}
+	return S_OK;
+}
+
+XlCallArgType LogHelper::ParseVoidRet(WCHAR typeChar)
+{
+	if (__Xc('<') == typeChar)
+	{
+		return xlArgRetrun1;
+	}
+	else if (__Xc('1') <= typeChar &&
+		__Xc('9') >= typeChar)
+	{
+		return (XlCallArgType)(typeChar - __Xc('0'));
+	}
+	return xlArgNone;
+}
+
+void** LogHelper::LogUdfArgument(void* key, void** lpArgument)
+{
+	m_callstack.push_back(LogBuffer());
+	LogBuffer& buff = m_callstack.back();
+
+	const XllFuncInfo& info = m_udfMap.at(key);
+	const std::vector<XlCallArgType>& types = info.argTypes;
+	buff.sFuncAttr = __X("Excel");
+	buff.sFuncName = info.funcName;
+	buff.argsOperType.resize(types.size());
+	buff.argsOperValue.resize(types.size());
+	for (UINT i = 0; i < types.size(); ++i)
+	{
+		GetUDFArgTypeName(types[i], buff.argsOperType[i]);
+		DWORD addrInc = GetUDFArgValue(types[i], lpArgument, buff.argsOperValue[i]);
+		lpArgument += addrInc;
+	}
+	return lpArgument;
+}
+
+void LogHelper::GetUDFArgTypeName(XlCallArgType type, std::wstring& name)
+{
+	name.clear();
+	switch (type)
+	{
+	case xlArgNone:
+		name = __X("void");
+		break;
+	case xlArgRetrun1:
+		name = __X("arg1");
+		break;
+	case xlArgRetrun2:
+		name = __X("arg2");
+		break;
+	case xlArgRetrun3:
+		name = __X("arg3");
+		break;
+	case xlArgRetrun4:
+		name = __X("arg4");
+		break;
+	case xlArgRetrun5:
+		name = __X("arg5");
+		break;
+	case xlArgRetrun6:
+		name = __X("arg6");
+		break;
+	case xlArgRetrun7:
+		name = __X("arg7");
+		break;
+	case xlArgRetrun8:
+		name = __X("arg8");
+		break;
+	case xlArgRetrun9:
+		name = __X("arg9");
+		break;
+	case xlArgBool:
+		name = __X("BOOL");
+		break;
+	case xlArgBoolRef:
+		name = __X("BOOL*");
+		break;
+	case xlArgDouble:
+		name = __X("double");
+		break;
+	case xlArgDoubleRef:
+		name = __X("double*");
+		break;
+	case xlArgCStr:
+		name = __X("char*");
+		break;
+	case xlArgPascalStr:
+		name = __X("char*[pas]");
+		break;
+	case xlArgUShort:
+		name = __X("ushort");
+		break;
+	case xlArgShort:
+		name = __X("short");
+		break;
+	case xlArgShortRef:
+		name = __X("short*");
+		break;
+	case xlArgInt:
+		name = __X("int");
+		break;
+	case xlArgIntRef:
+		name = __X("int*");
+		break;
+	case xlArgFloatArr:
+		name = __X("FP*");
+		break;
+	case xlArgArray:
+		name = __X("ushort*, ushort*, double*");
+		break;
+	case xlArgOper:
+		name = __X("oper*");
+		break;
+	case xlArgXLOper:
+		name = __X("xloper*");
+		break;
+	case xlArgCWStr:
+		name = __X("WCHAR*");
+		break;
+	case xlArgPascalWStr:
+		name = __X("WCHAR*[pas]");
+		break;
+	case xlArgFloatArr12:
+		name = __X("FP12*");
+		break;
+	case xlArgArray12:
+		name = __X("int*, int*, double*");
+		break;
+	case xlArgOper12:
+		name = __X("oper12*");
+		break;
+	case xlArgXLOper12:
+		name = __X("xloper12*");
+		break;
+	case xlArgCStrInOut:
+		name = __X("char*[modify]");
+		break;
+	case xlArgCWStrInOut:
+		name = __X("WCHAR*[modify]");
+		break;
+	case xlArgPascalStrInOut:
+		name = __X("char*[pas][modify]");
+		break;
+	case xlArgPascalWStrInOut:
+		name = __X("WCHAR*[pas][modify]");
+		break;
+	default:
+		break;
+	}
+}
+
+DWORD LogHelper::GetUDFArgValue(XlCallArgType type, void** lpArgument, std::wstring& value)
+{
+	DWORD addressInc = 1;
+	std::wstringstream stream;
+	switch (type)
+	{
+	case xlArgBool:
+		stream << (*((BOOL*)lpArgument) ? __X("TRUE") : __X("FALSE"));
+		break;
+	case xlArgBoolRef:
+		stream << (**((BOOL**)lpArgument) ? __X("TRUE") : __X("FALSE"));
+		break;
+	case xlArgDouble:
+		stream << *((double*)lpArgument);
+		++addressInc;
+		break;
+	case xlArgDoubleRef:
+		stream << **((double**)lpArgument);
+		break;
+	case xlArgCStr:
+	case xlArgCStrInOut:
+		stream << *((char**)lpArgument);
+		break;
+	case xlArgPascalStr:
+	case xlArgPascalStrInOut:
+	{
+		std::wstring str;
+		GetPascalString(*((char**)lpArgument), str);
+		stream << str;
+		break;
+	}
+	case xlArgUShort:
+		stream << *((unsigned short*)lpArgument);
+		break;
+	case xlArgShort:
+		stream << *((short*)lpArgument);
+		break;
+	case xlArgShortRef:
+		stream << **((short**)lpArgument);
+		break;
+	case xlArgInt:
+		stream << *((int*)lpArgument);
+		break;
+	case xlArgIntRef:
+		stream << **((int**)lpArgument);
+		break;
+	case xlArgFloatArr:
+	{
+		FP* pFP = *((FP**)lpArgument);
+		stream << pFP->rows << __Xc('x') << pFP->columns;
+		break;
+	}
+	case xlArgArray:
+	{
+		WORD rows = **((WORD**)lpArgument);
+		++lpArgument;
+		WORD cols = **((WORD**)lpArgument);
+		++lpArgument;
+		double* lparray = *((double**)lpArgument);
+		stream << rows << __Xc('x') << cols;
+		addressInc += 2;
+		break;
+	}
+	case xlArgOper:
+	case xlArgXLOper:
+	{
+		LPXLOPER lpoper = *((LPXLOPER*)lpArgument);
+		std::wstring sType, sVal;
+		LogXloper(lpoper, sType, sVal);
+		stream << __Xc('[') << sType << __X("] ") << sVal;
+		break;
+	}
+	case xlArgCWStr:
+	case xlArgCWStrInOut:
+		stream << *((WCHAR**)lpArgument);
+		break;
+	case xlArgPascalWStr:
+	case xlArgPascalWStrInOut:
+	{
+		std::wstring str;
+		GetPascalString(*((WCHAR**)lpArgument), str);
+		stream << str;
+		break;
+	}
+	case xlArgFloatArr12:
+	{
+		FP12* pFP = *((FP12**)lpArgument);
+		stream << pFP->rows << __Xc('x') << pFP->columns;
+		break;
+	}
+	case xlArgArray12:
+	{
+		int rows = **((int**)lpArgument);
+		++lpArgument;
+		int columns = **((int**)lpArgument);
+		++lpArgument;
+		double* lparray = *((double**)lpArgument);
+		stream << rows << __Xc('x') << columns;
+		addressInc += 2;
+		break;
+	}
+	case xlArgOper12:
+	case xlArgXLOper12:
+	{
+		LPXLOPER12 lpoper = *((LPXLOPER12*)lpArgument);
+		std::wstring sType, sVal;
+		LogXloper(lpoper, sType, sVal);
+		stream << __Xc('[') << sType << __X("] ") << sVal;
+		break;
+	}
+	default:
+		break;
+	}
+	value = stream.str();
+	return addressInc;
+}
+
+void LogHelper::LogUdfEnd(void* key, XlFuncResult result)
+{
+	if (m_bPause)
+		return;
+
+	LogBuffer& buff = m_callstack.back();
+	const XllFuncInfo& info = m_udfMap.at(key);
+	GetUDFArgTypeName(info.retrunType, buff.sResOperType);
+	GetUDFArgValue(info.retrunType, (void**)&result, buff.sResOperValue);
+	PrintTopBuffer(0);
+}
+
+DWORD PASCAL UDFHook()
+{
+	PVOID* lpArgBegin = NULL;
+	__asm
+	{
+		mov eax, ebp;
+		add	eax, 8;
+		mov lpArgBegin, eax;
+	}
+	XlFuncResult funcRes = { 0 };
+	XlCallArgType resType = xlArgNone;
+	UINT nBytes = 0;
+	{
+		PVOID key = *lpArgBegin;
+		++lpArgBegin;
+
+		PVOID* lpArgEnd = LogHelper::Instance().LogUdfArgument(key, lpArgBegin);
+		const XllFuncInfo& info = LogHelper::Instance().GetUDFMap().at(key);
+
+		resType = info.retrunType;
+		void* pEntry = info.pEntryPoint;
+		UINT nDWORDs = lpArgEnd - lpArgBegin;
+		nBytes = nDWORDs * 4;
+		DWORD nESP = 0;
+		__asm
+		{
+			mov		eax, lpArgBegin;
+			mov		ecx, nDWORDs;
+			mov		nESP, esp;
+			sub		esp, nBytes;
+			mov		edx, esp;
+			push	ebx;
+			{
+			LoopBegin:
+				cmp		ecx, 0;
+				je		LoopEnd;
+				mov		ebx, [eax];
+				mov		[edx], ebx;
+
+				dec		ecx;
+				add		eax, 4;
+				add		edx, 4;
+				jmp		LoopBegin;
+			LoopEnd:
+			}
+			pop		ebx;
+			call	pEntry;
+			mov		esp, nESP;
+			{
+				cmp		resType, xlArgDouble;
+				je		GetDouble;
+				// default:
+				mov		dword ptr[funcRes], eax;
+				jmp		EndCall;
+			GetDouble:	// case xlArgDouble
+				fstp	qword ptr[funcRes];
+			}
+		EndCall:
+		}
+		LogHelper::Instance().LogUdfEnd(key, funcRes);
+	}
+
+	__asm
+	{
+		cmp		resType, xlArgDouble;
+		je		ReturnDouble;
+		// default:
+		mov		eax, dword ptr[funcRes];
+		jmp		EndReturn;
+	ReturnDouble:	// case xlArgDouble
+		fld		qword ptr[funcRes];
+	EndReturn:
+		push	ebx;
+		mov		ecx, lpArgBegin;
+		add		ecx, nBytes;
+		mov		edx, ebp;
+		add		edx, 8;
+		{
+		LoopBegin2:
+			cmp		esp, edx;
+			je		LoopEnd2;
+			sub		ecx, 4;
+			sub		edx, 4;
+			mov		ebx, [edx];
+			mov		[ecx], ebx;
+			jmp		LoopBegin2;
+		LoopEnd2:
+		}
+		sub		ecx, edx;
+		add		ebp, ecx;
+		add		esp, ecx;
+		pop		ebx;
+// 		mov		ecx, __security_cookie;
+// 		xor		ecx, ebp;
+// 		mov		[ebp - 10h], ecx;
+	}
+	return funcRes.dw;
+}
+
+ShellCode::ShellCode(PVOID srcFunc)
+{
+	char* lpAddr = m_code;
+
+	(*(BYTE*)lpAddr) = 0xB8;	// mov eax, srcFunc
+	++lpAddr;
+	*((PVOID*)lpAddr) = srcFunc;
+	lpAddr += sizeof(PVOID);
+
+	(*(BYTE*)lpAddr) = (char)0x59;	// pop ecx
+	++lpAddr;
+	(*(BYTE*)lpAddr) = (char)0x50;	// push eax
+	++lpAddr;
+	(*(BYTE*)lpAddr) = (char)0x51;	// push ecx
+	++lpAddr;
+
+	(*(BYTE*)lpAddr) = 0xB8;	// mov eax, UDFHook
+	++lpAddr;
+	*((PVOID*)lpAddr) = UDFHook;
+	lpAddr += sizeof(PVOID);
+
+	(*(BYTE*)lpAddr) = (char)0xFF;	// jmp, eax
+	++lpAddr;
+	(*(BYTE*)lpAddr) = (char)0xE0;
+	++lpAddr;
+
+	ASSERT(lpAddr - m_code < m_size);
+}
+
+PVOID ShellCode::address()
+{
+	return (PVOID)m_code;
+}
+
+void ShellCode::operator=(const ShellCode& other)
+{
+	memcpy(m_code, other.m_code, m_size);
 }

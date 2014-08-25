@@ -2,10 +2,14 @@
 #include <iomanip>
 
 template <class LPOperType>
-void LogHelper::LogFunctionBegin(int xlfn, int coper, LPOperType *rgpxloper, LogBuffer& buffer)
+void LogHelper::LogFunctionBegin(int xlfn, int coper, LPOperType *rgpxloper)
 {
 	if (m_bPause)
 		return;
+
+	m_callstack.push_back(LogBuffer());
+	LogBuffer& buffer = m_callstack.back();
+	buffer.xlfn = xlfn;
 
 	GetXlFunctionTypeStr(xlfn, buffer.sFuncAttr);
 	GetXlFunctionName(xlfn, buffer.sFuncName);
@@ -32,18 +36,21 @@ void LogHelper::LogFunctionBegin(int xlfn, int coper, LPOperType *rgpxloper, Log
 }
 
 template <class LPOperType>
-void LogHelper::LogFunctionEnd(int result, LPOperType xloperRes, LogBuffer& buffer)
+void LogHelper::LogFunctionEnd(int result, LPOperType xloperRes)
 {
 	if (m_bPause)
 		return;
 
+	LogBuffer& buffer = m_callstack.back();
 	if (xloperRes)
 	{
 		LogXloper(xloperRes, buffer.sResOperType, buffer.sResOperValue);
 	}
-
 	GetXlResultName((XLCALL_RESULT)result, buffer.sResult);
-	PrintBuffer(buffer);
+	if (buffer.xlfn == xlcall::xlfRegister)
+		LogHelper::Instance().RegisterFunction(buffer);
+
+	PrintTopBuffer(0);
 }
 
 template <class LPOperType>

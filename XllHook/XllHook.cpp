@@ -8,6 +8,7 @@
 #include "ExcelProcxy.h"
 #include "loghelper.h"
 #include "xlcall.h"
+#include "XllHook.h"
 
 BOOL ProcessAttach(HMODULE hDll);
 BOOL ProcessDetach(HMODULE hDll);
@@ -507,4 +508,48 @@ SHORT __stdcall Mine_GetAsyncKeyState(_In_ int vKey)
 		++i;
 	}
 	return res;
+}
+
+void AttachFunction(PVOID *ppvReal, PVOID pvMine, PCHAR psz)
+{
+	DetourTransactionBegin();
+	DetourUpdateThread(GetCurrentThread());
+
+	// For this many APIs, we'll ignore one or two can't be detoured.
+	DetourSetIgnoreTooSmall(TRUE);
+
+	DetAttach(ppvReal, pvMine, psz);
+
+	if (DetourTransactionCommit() != NO_ERROR) {
+		OutputDebugStringA("AttachDetours failed on DetourTransactionCommit\n");
+
+		PVOID *ppbFailedPointer = NULL;
+		LONG error = DetourTransactionCommitEx(&ppbFailedPointer);
+
+		// 		Trace("DetourTransactionCommitEx Error: %d (%p/%p)", error, ppbFailedPointer, *ppbFailedPointer);
+		return;
+	}
+	else{
+		OutputDebugStringA("AttachDetours OK\n");
+	}
+
+}
+
+void DetachFunction(PVOID *ppvReal, PVOID pvMine, PCHAR psz)
+{
+	DetourTransactionBegin();
+	DetourUpdateThread(GetCurrentThread());
+
+	// For this many APIs, we'll ignore one or two can't be detoured.
+	DetourSetIgnoreTooSmall(TRUE);
+
+	DetDetach(ppvReal, pvMine, psz);
+
+	if (DetourTransactionCommit() != 0) {
+		PVOID *ppbFailedPointer = NULL;
+		LONG error = DetourTransactionCommitEx(&ppbFailedPointer);
+
+		printf("traceapi.dll: Detach transaction failed to commit. Error %d (%p/%p)",
+			error, ppbFailedPointer, *ppbFailedPointer);
+	}
 }
