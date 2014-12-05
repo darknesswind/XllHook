@@ -1,5 +1,6 @@
 #include <ctype.h>
 #include <windows.h>
+#include <WinGDI.h>
 #include "detver.h"
 #include "detours.h"
 #include "syelog.h"
@@ -9,6 +10,7 @@
 #include "loghelper.h"
 #include "xlcall.h"
 #include "XllHook.h"
+#include <map>
 
 BOOL ProcessAttach(HMODULE hDll);
 BOOL ProcessDetach(HMODULE hDll);
@@ -19,6 +21,7 @@ BOOL ThreadDetach(HMODULE hDll);
 
 static HMODULE s_hExcel = NULL;
 static HMODULE s_hInst = NULL;
+static HMODULE s_hThis = NULL;
 static WCHAR s_wzDllPath[MAX_PATH + 1];
 static char s_szDllPath[MAX_PATH + 1];
 static BOOL s_bLog = FALSE;
@@ -65,12 +68,44 @@ extern "C" {
 
 FARPROC(__stdcall *Real_GetProcAddress)(_In_ HMODULE hModule, _In_ LPCSTR lpProcName)
 	= GetProcAddress;
-
 SHORT(__stdcall *Real_GetAsyncKeyState)(_In_ int vKey)
 	= GetAsyncKeyState;
+void(__stdcall *Real_SysFreeString)(__in_opt BSTR bstrString)
+	= SysFreeString;
+BSTR(__stdcall *Real_SysAllocString)(__in_z_opt const OLECHAR * psz)
+	= SysAllocString;
+INT(__stdcall *Real_SysReAllocString)(__deref_inout_ecount_z(stringLength(psz) + 1) BSTR* pbstr, __in_z_opt const OLECHAR* psz)
+	= SysReAllocString;
+BSTR(__stdcall *Real_SysAllocStringLen)(__in_ecount_opt(ui) const OLECHAR * strIn, UINT ui)
+	= SysAllocStringLen;
+INT(__stdcall *Real_SysReAllocStringLen)(__deref_inout_ecount_z(len + 1) BSTR* pbstr, __in_z_opt const OLECHAR* psz, __in unsigned int len)
+	= SysReAllocStringLen;
+int(__stdcall *Real_GetWindowTextA)(__in HWND hWnd, __out_ecount(nMaxCount) LPSTR lpString, __in int nMaxCount)
+	= GetWindowTextA;
+BOOL(__stdcall *Real_SetWindowTextA)(_In_ HWND hWnd, _In_opt_ LPCSTR lpString)
+	= SetWindowTextA;
+BOOL(__stdcall *Real_SetWindowTextW)(_In_ HWND hWnd, _In_opt_ LPCWSTR lpString)
+	= SetWindowTextW;
+LRESULT(__stdcall *Real_DefWindowProcA)(_In_ HWND hWnd, _In_ UINT Msg, _In_ WPARAM wParam, _In_ LPARAM lParam)
+	= DefWindowProcA;
+LRESULT(__stdcall *Real_DefWindowProcW)(_In_ HWND hWnd, _In_ UINT Msg, _In_ WPARAM wParam, _In_ LPARAM lParam)
+	= DefWindowProcW;
+BOOL(__stdcall *Real_GetTextMetricsW)(__in HDC hdc, __out LPTEXTMETRICW lptm)
+	= GetTextMetricsW;
 
 FARPROC __stdcall Mine_GetProcAddress(HMODULE hModule, LPCSTR lpProcName);
 SHORT __stdcall Mine_GetAsyncKeyState(_In_ int vKey);
+void __stdcall Mine_SysFreeString(__in_opt BSTR bstrString);
+BSTR __stdcall Mine_SysAllocString(__in_z_opt const OLECHAR * psz);
+INT  __stdcall Mine_SysReAllocString(__deref_inout_ecount_z(stringLength(psz) + 1) BSTR* pbstr, __in_z_opt const OLECHAR* psz);
+BSTR __stdcall Mine_SysAllocStringLen(__in_ecount_opt(ui) const OLECHAR * strIn, UINT ui);
+INT __stdcall  Mine_SysReAllocStringLen(__deref_inout_ecount_z(len + 1) BSTR* pbstr, __in_z_opt const OLECHAR* psz, __in unsigned int len);
+int __stdcall Mine_GetWindowTextA(__in HWND hWnd, __out_ecount(nMaxCount) LPSTR lpString, __in int nMaxCount);
+BOOL __stdcall Mine_SetWindowTextA(_In_ HWND hWnd, _In_opt_ LPCSTR lpString);
+BOOL __stdcall Mine_SetWindowTextW(_In_ HWND hWnd, _In_opt_ LPCWSTR lpString);
+LRESULT __stdcall Mine_DefWindowProcA(_In_ HWND hWnd, _In_ UINT Msg, _In_ WPARAM wParam, _In_ LPARAM lParam);
+LRESULT __stdcall Mine_DefWindowProcW(_In_ HWND hWnd, _In_ UINT Msg, _In_ WPARAM wParam, _In_ LPARAM lParam);
+BOOL __stdcall Mine_GetTextMetricsW(__in HDC hdc, __out LPTEXTMETRICW lptm);
 
 ProcMdCallBack MdCallBack = NULL;
 ProcMdCallBack12 MdCallBack12 = NULL;
@@ -101,6 +136,7 @@ BOOL WINAPI DllMain(
 			DetourRestoreAfterWith();
 			ProcessAttach((HMODULE)hinst);
 // 			LogHelper::Instance().OpenLogFile();
+			s_hThis = ::LoadLibraryA("XllHook.xll");
 		}
 		else
 		{
@@ -431,15 +467,29 @@ LONG AttachDetours(VOID)
 	// For this many APIs, we'll ignore one or two can't be detoured.
 	DetourSetIgnoreTooSmall(TRUE);
 
-// 	ATTACH(GetProcAddress);
+#if SET_Hook_XLL
 	if (MdCallBack)
 		ATTACH(MdCallBack);
 	if (MdCallBack12)
 		ATTACH(MdCallBack12);
 	if (_LPenHelper)
 		ATTACH(_LPenHelper);
+#endif
+#if SET_Hook_Other
+// 	ATTACH(GetProcAddress);
 // 	ATTACH(GetAsyncKeyState);
-
+// 	ATTACH(DefWindowProcA);
+// 	ATTACH(DefWindowProcW);
+// 	ATTACH(GetWindowTextA);
+// 	ATTACH(SetWindowTextA);
+// 	ATTACH(SetWindowTextW);
+//  ATTACH(SysFreeString);
+// 	ATTACH(SysAllocString);
+// 	ATTACH(SysReAllocString);
+// 	ATTACH(SysAllocStringLen);
+// 	ATTACH(SysReAllocStringLen);
+	ATTACH(GetTextMetricsW);
+#endif
 	if (DetourTransactionCommit() != NO_ERROR) {
 		OutputDebugStringA("AttachDetours failed on DetourTransactionCommit\n");
 
@@ -464,15 +514,29 @@ LONG DetachDetours(VOID)
 	// For this many APIs, we'll ignore one or two can't be detoured.
 	DetourSetIgnoreTooSmall(TRUE);
 
-// 	DETACH(GetProcAddress);
+#if SET_Hook_XLL
 	if (MdCallBack)
 		DETACH(MdCallBack);
 	if (MdCallBack12)
 		DETACH(MdCallBack12);
 	if (_LPenHelper)
 		DETACH(_LPenHelper);
+#endif
+#if SET_Hook_Other
+// 	DETACH(GetProcAddress);
 // 	DETACH(GetAsyncKeyState);
-
+// 	DETACH(DefWindowProcA);
+// 	DETACH(DefWindowProcW);
+// 	DETACH(GetWindowTextA);
+// 	DETACH(SetWindowTextA);
+// 	DETACH(SetWindowTextW);
+//  DETACH(SysFreeString);
+// 	DETACH(SysAllocString);
+// 	DETACH(SysReAllocString);
+// 	DETACH(SysAllocStringLen);
+// 	DETACH(SysReAllocStringLen);
+ 	DETACH(GetTextMetricsW);
+#endif
 	if (DetourTransactionCommit() != 0) {
 		PVOID *ppbFailedPointer = NULL;
 		LONG error = DetourTransactionCommitEx(&ppbFailedPointer);
@@ -482,32 +546,6 @@ LONG DetachDetours(VOID)
 		return error;
 	}
 	return 0;
-}
-
-FARPROC __stdcall Mine_GetProcAddress(HMODULE hModule, LPCSTR lpProcName)
-{
-	FARPROC rv = 0;
-	__try {
-		rv = Real_GetProcAddress(hModule, lpProcName);
-		if (!IsBadReadPtr(lpProcName, sizeof(void*)))
-		{
-		}
-	}
-	__finally {
-		// 		_PrintExit("GetProcAddress(,) -> %p\n", rv);
-	};
-	return rv;
-}
-
-SHORT __stdcall Mine_GetAsyncKeyState(_In_ int vKey)
-{
-	SHORT res = Real_GetAsyncKeyState(vKey);
-	if (vKey == VK_CANCEL)
-	{
-		int i = 0;
-		++i;
-	}
-	return res;
 }
 
 void AttachFunction(PVOID *ppvReal, PVOID pvMine, PCHAR psz)
@@ -553,3 +591,190 @@ void DetachFunction(PVOID *ppvReal, PVOID pvMine, PCHAR psz)
 			error, ppbFailedPointer, *ppbFailedPointer);
 	}
 }
+
+FARPROC __stdcall Mine_GetProcAddress(HMODULE hModule, LPCSTR lpProcName)
+{
+	FARPROC rv = 0;
+	__try {
+		rv = Real_GetProcAddress(hModule, lpProcName);
+		if (!IsBadReadPtr(lpProcName, sizeof(void*)))
+		{
+		}
+	}
+	__finally {
+		// 		_PrintExit("GetProcAddress(,) -> %p\n", rv);
+	};
+	return rv;
+}
+
+SHORT __stdcall Mine_GetAsyncKeyState(_In_ int vKey)
+{
+	SHORT res = Real_GetAsyncKeyState(vKey);
+	if (vKey == VK_CANCEL)
+	{
+		int i = 0;
+		++i;
+	}
+	return res;
+}
+
+std::map<const BSTR, int> g_addrMap;
+bool sysAllocLock = false;
+
+bool IsTarget(BSTR bstrString)
+{
+	return true;
+	if (g_addrMap.find(bstrString) != g_addrMap.end())
+		return true;
+
+	const WCHAR* target1 = L"DESSeal.DESSealObj.1";
+	if (!IsBadReadPtr(bstrString, sizeof(void*)))
+	{
+		return (0 == wcsicmp(target1, bstrString));
+	}
+	return false;
+}
+
+void __stdcall Mine_SysFreeString(__in_opt BSTR bstrString)
+{
+	if (IsTarget(bstrString))
+	{
+// 		assert(g_addrMap[bstrString] > 0);
+		--g_addrMap[bstrString];
+		if (g_addrMap[bstrString] < 0)
+		{
+			DebugBreak();
+			OutputDebugStringW(bstrString);
+			OutputDebugStringA("\n");
+		}
+// 		assert(0 == g_addrMap[bstrString]);
+// 		if (g_addrMap[bstrString] < 0)
+// 			g_addrMap[bstrString] = 0;
+	}
+	Real_SysFreeString(bstrString);
+}
+
+BSTR __stdcall Mine_SysAllocString(__in_z_opt const OLECHAR * psz)
+{
+	sysAllocLock = true;
+	BSTR bstrString = Real_SysAllocString(psz);
+	sysAllocLock = false;
+
+	if (IsTarget(bstrString))
+	{
+// 		assert(g_addrMap[bstrString] >= 0);
+		++g_addrMap[bstrString];
+	}
+	return bstrString;
+}
+
+INT __stdcall Mine_SysReAllocString(__deref_inout_ecount_z(stringLength(psz) + 1) BSTR* pbstr, __in_z_opt const OLECHAR* psz)
+{
+	if (IsTarget(*pbstr))
+	{
+// 		assert(g_addrMap[*pbstr] > 0);
+		--g_addrMap[*pbstr];
+// 		if (g_addrMap[*pbstr] < 0)
+// 			g_addrMap[*pbstr] = 0;
+	}
+	sysAllocLock = true;
+	INT res = Real_SysReAllocString(pbstr, psz);
+	sysAllocLock = false;
+
+	if (IsTarget(*pbstr))
+	{
+// 		assert(g_addrMap[*pbstr] >= 0);
+		++g_addrMap[*pbstr];
+	}
+	return res;
+}
+
+BSTR __stdcall Mine_SysAllocStringLen(__in_ecount_opt(ui) const OLECHAR * strIn, UINT ui)
+{
+	BSTR bstrString = Real_SysAllocStringLen(strIn, ui);
+
+	if (!sysAllocLock && IsTarget(bstrString))
+	{
+// 		assert(g_addrMap[bstrString] >= 0);
+		++g_addrMap[bstrString];
+	}
+	return bstrString;
+}
+
+INT __stdcall Mine_SysReAllocStringLen(__deref_inout_ecount_z(len + 1) BSTR* pbstr, __in_z_opt const OLECHAR* psz, __in unsigned int len)
+{
+	if (!sysAllocLock && g_addrMap.find(*pbstr) != g_addrMap.end())
+	{
+// 		assert(g_addrMap[*pbstr] > 0);
+		--g_addrMap[*pbstr];
+// 		if (g_addrMap[*pbstr] < 0)
+// 			g_addrMap[*pbstr] = 0;
+	}
+
+	INT res = Real_SysReAllocStringLen(pbstr, psz, len);
+
+	if (!sysAllocLock && IsTarget(*pbstr))
+	{
+// 		assert(g_addrMap[*pbstr] >= 0);
+		++g_addrMap[*pbstr];
+	}
+	return res;
+}
+
+int __stdcall Mine_GetWindowTextA(__in HWND hWnd, __out_ecount(nMaxCount) LPSTR lpString, __in int nMaxCount)
+{
+	int len = Real_GetWindowTextA(hWnd, lpString, nMaxCount);
+	//int len = DefWindowProcA(hWnd, WM_GETTEXT, nMaxCount, (LPARAM)lpString);
+	if (len > 0xFF)
+	{
+		len = 0;
+	}
+	else
+	{
+		int tmp = strnlen(lpString, nMaxCount);
+		if (tmp < len)
+			len = tmp;
+	}
+	return len;
+}
+
+BOOL __stdcall Mine_SetWindowTextA(_In_ HWND hWnd, _In_opt_ LPCSTR lpString)
+{
+	return Real_SetWindowTextA(hWnd, lpString);
+}
+
+BOOL __stdcall Mine_SetWindowTextW(_In_ HWND hWnd, _In_opt_ LPCWSTR lpString)
+{
+	return Real_SetWindowTextW(hWnd, lpString);
+}
+
+LRESULT __stdcall Mine_DefWindowProcA(_In_ HWND hWnd, _In_ UINT Msg, _In_ WPARAM wParam, _In_ LPARAM lParam)
+{
+	if (Msg == WM_GETTEXT)
+	{
+		return Real_DefWindowProcA(hWnd, Msg, wParam, lParam);
+	}
+	return Real_DefWindowProcA(hWnd, Msg, wParam, lParam);
+}
+
+LRESULT __stdcall Mine_DefWindowProcW(_In_ HWND hWnd, _In_ UINT Msg, _In_ WPARAM wParam, _In_ LPARAM lParam)
+{
+	if (Msg == WM_GETTEXT)
+	{
+		return Real_DefWindowProcW(hWnd, Msg, wParam, lParam);
+	}
+	return Real_DefWindowProcW(hWnd, Msg, wParam, lParam);
+}
+
+BOOL __stdcall Mine_GetTextMetricsW(__in HDC hdc, __out LPTEXTMETRICW lptm)
+{
+	BOOL res = Real_GetTextMetricsW(hdc, lptm);
+	static int ascOff = 0;
+	static int desOff = 0;
+
+	ASSERT(lptm->tmAscent + lptm->tmDescent == lptm->tmHeight);
+	lptm->tmAscent += ascOff;
+	lptm->tmDescent += desOff;
+	lptm->tmHeight = lptm->tmAscent + lptm->tmDescent;
+}
+

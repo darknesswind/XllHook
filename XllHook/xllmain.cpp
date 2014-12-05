@@ -3,6 +3,8 @@
 #include "xlcall.h"
 #include <framewrk.h>
 #include "loghelper.h"
+#include "ExcelProcxy.h"
+#define __CreateMenu 1
 
 static const UINT uRegFuncCount = 4;
 static LPWSTR rgFuncs[uRegFuncCount][7] = {
@@ -82,6 +84,7 @@ __declspec(dllexport) int WINAPI xlAutoOpen(void)
 	else
 		Excel12AutoOpen();
 
+	LogHelper::Instance().SetOpened(true);
 	LogHelper::Instance().ResumeLog();
 	return 1;
 }
@@ -101,6 +104,7 @@ void Excel4AutoOpen()
 	/* Free the XLL filename */
 	Excel4(xlcall::xlFree, 0, 1, (LPXLOPER)&xDLL);
 
+#if __CreateMenu
 	Excel4(xlcall::xlfGetBar, &xTest, 3, TempInt(10), TempStrConst("XllHook"), TempInt(0));
 	if (xTest.xltype == xltypeErr)
 	{
@@ -130,6 +134,7 @@ void Excel4AutoOpen()
 		GlobalUnlock(hMenu);
 		GlobalFree(hMenu);
 	}
+#endif
 }
 
 void Excel12AutoOpen()
@@ -148,6 +153,7 @@ void Excel12AutoOpen()
 	/* Free the XLL filename */
 	Excel12f(xlcall::xlFree, 0, 1, (LPXLOPER12)&xDLL);
 
+#if __CreateMenu
 	Excel12f(xlcall::xlfGetBar, &xTest, 3, TempInt12(10), TempStr12(L"XllHook"), TempInt12(0));
 	if (xTest.xltype == xltypeErr)
 	{
@@ -177,6 +183,7 @@ void Excel12AutoOpen()
 		GlobalUnlock(hMenu);
 		GlobalFree(hMenu);
 	}
+#endif
 }
 
 __declspec(dllexport) int WINAPI xlAutoClose(void)
@@ -206,6 +213,7 @@ __declspec(dllexport) int WINAPI xlAutoClose(void)
 			Excel12f(xlcall::xlFree, 0, 1, (LPXLOPER12)&xRes);
 		}
 	}
+	LogHelper::Instance().SetOpened(false);
 	LogHelper::Instance().ResumeLog();
 	return 1;
 }
@@ -251,9 +259,10 @@ __declspec(dllexport) LPXLOPER WINAPI xlAddInManagerInfo(LPXLOPER xAction)
 	{
 		xInfo.xltype = xltypeStr;
 #ifdef _DEBUG
-		xInfo.val.str = "\007!!!!!DBGHOOK";
+		xInfo.val.str = "\014!!!!!DBGHOOK";
+// 		xInfo.val.str = "\tFixWndTxt";
 #else
-		xInfo.val.str = "\007!!!!!XLLHOOK";
+		xInfo.val.str = "\014!!!!!XLLHOOK";
 #endif
 	}
 	else
@@ -287,6 +296,7 @@ __declspec(dllexport) LPXLOPER12 WINAPI xlAddInManagerInfo12(LPXLOPER12 xAction)
 		xInfo.xltype = xltypeStr;
 #ifdef _DEBUG
 		xInfo.val.str = L"\014!!!!!DBGHOOK";
+// 		xInfo.val.str = L"\tFixWndTxt";
 #else
 		xInfo.val.str = L"\014!!!!!XLLHOOK";
 #endif

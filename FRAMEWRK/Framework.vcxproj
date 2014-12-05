@@ -17,6 +17,14 @@
       <Configuration>Release</Configuration>
       <Platform>x64</Platform>
     </ProjectConfiguration>
+    <ProjectConfiguration Include="vs10|Win32">
+      <Configuration>vs10</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="vs10|x64">
+      <Configuration>vs10</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{D4CBCA66-18FA-453D-BE72-A13AFE5C4F22}</ProjectGuid>
@@ -32,11 +40,19 @@
     <ConfigurationType>StaticLibrary</ConfigurationType>
     <PlatformToolset>v120_xp</PlatformToolset>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='vs10|Win32'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <PlatformToolset>v100</PlatformToolset>
+  </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>Makefile</ConfigurationType>
     <PlatformToolset>v120</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>Makefile</ConfigurationType>
+    <PlatformToolset>v120</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='vs10|x64'" Label="Configuration">
     <ConfigurationType>Makefile</ConfigurationType>
     <PlatformToolset>v120</PlatformToolset>
   </PropertyGroup>
@@ -49,10 +65,16 @@
   <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="PropertySheets">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='vs10|Win32'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
   <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="PropertySheets">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
   <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='vs10|x64'" Label="PropertySheets">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
@@ -60,6 +82,21 @@
     <_ProjectFileVersion>12.0.21005.1</_ProjectFileVersion>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <OutDir>..\lib</OutDir>
+    <IntDir>$(Configuration)\</IntDir>
+    <NMakeBuildCommandLine>SET TYPE=DEBUG
+SET PLATFORM=$(Platform)
+nmake -f makefile all</NMakeBuildCommandLine>
+    <NMakeReBuildCommandLine>SET TYPE=DEBUG
+SET PLATFORM=$(Platform)
+nmake -f makefile clean
+nmake -f makefile all</NMakeReBuildCommandLine>
+    <NMakeCleanCommandLine>SET TYPE=DEBUG
+SET PLATFORM=$(Platform)
+nmake -f makefile clean</NMakeCleanCommandLine>
+    <NMakeOutput />
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='vs10|Win32'">
     <OutDir>..\lib</OutDir>
     <IntDir>$(Configuration)\</IntDir>
     <NMakeBuildCommandLine>SET TYPE=DEBUG
@@ -104,6 +141,21 @@ SET PLATFORM=$(Platform)
 nmake -f makefile clean</NMakeCleanCommandLine>
     <NMakeOutput />
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='vs10|x64'">
+    <OutDir>$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>$(Platform)\$(Configuration)\</IntDir>
+    <NMakeBuildCommandLine>SET TYPE=DEBUG
+SET PLATFORM=$(Platform)
+nmake -f makefile all</NMakeBuildCommandLine>
+    <NMakeReBuildCommandLine>SET TYPE=DEBUG
+SET PLATFORM=$(Platform)
+nmake -f makefile clean
+nmake -f makefile all</NMakeReBuildCommandLine>
+    <NMakeCleanCommandLine>SET TYPE=DEBUG
+SET PLATFORM=$(Platform)
+nmake -f makefile clean</NMakeCleanCommandLine>
+    <NMakeOutput />
+  </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <OutDir>$(Platform)\$(Configuration)\</OutDir>
     <IntDir>$(Platform)\$(Configuration)\</IntDir>
@@ -123,6 +175,17 @@ nmake -f makefile clean</NMakeCleanCommandLine>
     <ClCompile>
       <AdditionalIncludeDirectories>.\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+    </ClCompile>
+    <Lib>
+      <AdditionalLibraryDirectories>..\lib</AdditionalLibraryDirectories>
+      <AdditionalDependencies>xlcall32.lib</AdditionalDependencies>
+    </Lib>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='vs10|Win32'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>.\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <BufferSecurityCheck>true</BufferSecurityCheck>
     </ClCompile>
     <Lib>
       <AdditionalLibraryDirectories>..\lib</AdditionalLibraryDirectories>
@@ -149,6 +212,7 @@ nmake -f makefile clean</NMakeCleanCommandLine>
     <ClCompile Include="MemoryPool.cpp" />
     <ClCompile Include="XLCALL.CPP">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='vs10|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
     </ClCompile>
   </ItemGroup>

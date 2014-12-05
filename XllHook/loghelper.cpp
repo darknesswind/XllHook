@@ -18,6 +18,7 @@ LogHelper::LogHelper()
 	, m_nArrayCount(0)
 	, m_bPause(0)
 	, m_bFirstLog(true)
+	, m_bOpened(false)
 {
 	m_nCodePos = 0;
 	m_codes = (ShellCode*)VirtualAlloc(NULL,
@@ -28,7 +29,7 @@ LogHelper::LogHelper()
 
 LogHelper::~LogHelper()
 {
-	VirtualFree(m_codes, nMaxUDFuncNum * sizeof(ShellCode), MEM_RELEASE);
+	VirtualFree(m_codes, 0, MEM_RELEASE);
 }
 
 void LogHelper::GetXlFunctionName(int xlfn, std::wstring& str)
@@ -1165,6 +1166,24 @@ void LogHelper::GetPascalString(LPCSTR pStr, std::wstring& result)
 	}
 }
 
+void LogHelper::StrToWStr(LPCSTR pStr, std::wstring& result)
+{
+	result.clear();
+	if (pStr)
+	{
+		UINT nLen = strlen(pStr);
+		UINT nNewLen = MultiByteToWideChar(CP_ACP, 0, pStr, nLen, NULL, NULL);
+		WCHAR *pNewStr = (WCHAR*)malloc((nNewLen + 1) * sizeof(WCHAR));
+		if (pNewStr)
+		{
+			MultiByteToWideChar(CP_ACP, 0, pStr, nLen, pNewStr, nNewLen);
+			pNewStr[nNewLen] = __Xc('\0');
+			result = pNewStr;
+		}
+		free(pNewStr);
+	}
+}
+
 BOOL LogHelper::WStrToStr(const std::wstring& wstr, std::string& str)
 {
 	str.clear();
@@ -1365,7 +1384,7 @@ void LogHelper::PrintLeaveRow(const std::wstring& name)
 
 void LogHelper::LogLPenHelperBegin(int wCode, void* lpv)
 {
-	if (m_bPause)
+	if (!IsNeedLog())
 		return;
 
 	m_callstack.push_back(LogBuffer());
@@ -1387,7 +1406,7 @@ void LogHelper::LogLPenHelperBegin(int wCode, void* lpv)
 
 void LogHelper::LogLPenHelperEnd(int result)
 {
-	if (m_bPause)
+	if (!IsNeedLog())
 		return;
 
 	LogBuffer& buffer = m_callstack.back();
@@ -1400,7 +1419,9 @@ void LogHelper::LogLPenHelperEnd(int result)
 
 void LogHelper::RegisterFunction(LogBuffer& buffer)
 {
+#if SET_Hook_XLLExport
 	if (m_nCodePos >= nMaxUDFuncNum)
+#endif
 		return;
 
 	if (buffer.argsOperValue.size() < 3)
@@ -1416,8 +1437,6 @@ void LogHelper::RegisterFunction(LogBuffer& buffer)
 		return;
 
 	HMODULE hModule = ::GetModuleHandleW(sModule.c_str());
-	ASSERT(hModule);
-
 	void* lpProc = ::GetProcAddress(hModule, sProc.c_str());
 	if (!lpProc && !sProc.empty())
 	{
@@ -1798,8 +1817,11 @@ DWORD LogHelper::GetUDFArgValue(XlCallArgType type, void** lpArgument, std::wstr
 
 void LogHelper::LogUdfEnd(void* key, XlFuncResult result)
 {
-	if (m_bPause)
+	if (!IsNeedLog())
+	{
+		m_callstack.pop_back();
 		return;
+	}
 
 	LogBuffer& buff = m_callstack.back();
 	const XllFuncInfo& info = m_udfMap.at(key);

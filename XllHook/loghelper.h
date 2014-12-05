@@ -3,7 +3,24 @@
 
 #include <vector>
 #include <fstream>
+
+#if _MSC_VER > 1800
 #include <mutex>
+#else
+namespace std
+{
+	class mutex
+	{
+	public:
+		mutex() {}
+		~mutex() {}
+
+		void lock() {}
+		void unlock() {}
+	};
+}
+#endif
+
 #include <windows.h>
 #include "xlcall.h"
 #include <map>
@@ -152,14 +169,18 @@ public:
 	LogHelper();
 	~LogHelper();
 	static LogHelper& Instance() { return g_Instance; }
+	static void StrToWStr(LPCSTR pStr, std::wstring& result);
 
 	void OpenLogFile();
 	void CloseLogFile();
 
-	void PauseLog() { m_bPause = true; }
-	void ResumeLog() { m_bPause = false; }
+	void PauseLog() { ++m_bPause; }
+	void ResumeLog() { if (m_bPause > 0) --m_bPause; }
 	void ClearLog();
 	void OpenFolder();
+
+	void SetOpened(bool bOpened) { m_bOpened = bOpened; }
+	bool IsNeedLog() const { return !m_bPause && m_bOpened; }
 
 	template <class LPOperType>
 	void LogFunctionBegin(int xlfn, int coper, LPOperType *rgpxloper);
@@ -174,6 +195,8 @@ public:
 	void** LogUdfArgument(void* key, void** lpArgument);
 	void LogUdfEnd(void* key, XlFuncResult result);
 
+	std::wofstream& stream() { return m_fileStream; }
+
 protected:
 	void GetXlFunctionName(int xlfn, std::wstring& str);
 	void GetXlFunctionTypeStr(int xlfn, std::wstring& str);
@@ -182,7 +205,7 @@ protected:
 	void GetXloperErrName(XLOPER_ERRTYPE type, std::wstring& str);
 	void GetPascalString(LPCSTR, std::wstring& result);
 	void GetPascalString(LPCWSTR, std::wstring& result);
-	BOOL LogHelper::WStrToStr(const std::wstring& wstr, std::string& str);
+	BOOL WStrToStr(const std::wstring& wstr, std::string& str);
 
 	template <class LPOperType>
 	void LogXloper(LPOperType lpOper, std::wstring& sType, std::wstring& sVal);
@@ -219,6 +242,7 @@ private:
 	std::mutex	m_arrayMutex;
 	int m_bPause;
 	bool m_bFirstLog;
+	bool m_bOpened;
 
 	std::wstring m_sLogPath;
 	std::wstring m_sLogFile;

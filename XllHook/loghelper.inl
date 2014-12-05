@@ -4,7 +4,8 @@
 template <class LPOperType>
 void LogHelper::LogFunctionBegin(int xlfn, int coper, LPOperType *rgpxloper)
 {
-	if (m_bPause)
+	if (!m_bOpened ||
+		(m_bPause && xlfn != xlcall::xlfRegister))
 		return;
 
 	m_callstack.push_back(LogBuffer());
@@ -38,8 +39,17 @@ void LogHelper::LogFunctionBegin(int xlfn, int coper, LPOperType *rgpxloper)
 template <class LPOperType>
 void LogHelper::LogFunctionEnd(int result, LPOperType xloperRes)
 {
-	if (m_bPause)
+	if (!m_bOpened)
 		return;
+	if (m_bPause) {
+		if (m_callstack.size() > 0)	{
+			if (m_callstack.back().xlfn != xlcall::xlfRegister)
+				return;
+		}
+		else {
+			return;
+		}
+	}
 
 	LogBuffer& buffer = m_callstack.back();
 	if (xloperRes)
@@ -50,7 +60,10 @@ void LogHelper::LogFunctionEnd(int result, LPOperType xloperRes)
 	if (buffer.xlfn == xlcall::xlfRegister)
 		LogHelper::Instance().RegisterFunction(buffer);
 
-	PrintTopBuffer(0);
+	if (IsNeedLog())
+		PrintTopBuffer(0);
+	else
+		m_callstack.pop_back();
 }
 
 template <class LPOperType>
