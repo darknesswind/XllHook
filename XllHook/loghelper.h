@@ -24,6 +24,7 @@ namespace std
 #include <windows.h>
 #include "xlcall.h"
 #include <map>
+#include <unordered_map>
 
 #ifndef ASSERT
 #define ASSERT(x) assert(x)
@@ -42,7 +43,7 @@ namespace std
 #define PascalWStrMaxLen 0xFFFF
 #define FuncNumMask (0xFFF | xlCommand | xlSpecial)
 #define FuncTypeMask (0xF000)
-#define XLOPER_TYPEMASK (unsigned short)(0xFFF)
+#define XLOPER_TYPEMASK (unsigned short)(0xAFFF)
 
 #define TableBegin __X("<table border=\"1\">")
 #define TableEnd __X("</table>")
@@ -203,9 +204,13 @@ protected:
 	void GetXlResultName(XLCALL_RESULT res, std::wstring& str);
 	void GetXloperTypeName(int type, std::wstring& str);
 	void GetXloperErrName(XLOPER_ERRTYPE type, std::wstring& str);
+	void GetGetCellAttrName(int type, std::wstring& str);
+
 	void GetPascalString(LPCSTR, std::wstring& result);
 	void GetPascalString(LPCWSTR, std::wstring& result);
+	const std::wstring& GetBookSheetName(IDSHEET);
 	BOOL WStrToStr(const std::wstring& wstr, std::string& str);
+	LPCWSTR ColNumToStr(COL col);
 
 	template <class LPOperType>
 	void LogXloper(LPOperType lpOper, std::wstring& sType, std::wstring& sVal);
@@ -253,6 +258,7 @@ private:
 	ShellCode* m_codes;
 	UINT m_nCodePos;
 	std::vector<LogBuffer> m_callstack;
+	std::unordered_map<IDSHEET, std::wstring> m_docNameCache;
 
 	static const UINT nMaxUDFuncNum = 5000;
 	static LogHelper g_Instance;

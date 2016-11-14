@@ -3,6 +3,7 @@
 #include <ctime>
 #include <cassert>
 #include "XllHook.h"
+#include "ExcelProcxy.h"
 
 LogHelper LogHelper::g_Instance;
 
@@ -12,6 +13,8 @@ LogHelper LogHelper::g_Instance;
 	case value: stream << STRINGIFY(value); break
 #define EnumNameCase2(prefix, value)	\
 	case prefix##value: stream << STRINGIFY(value); break
+#define InvokeGet(name)\
+	case f##name: stream << STRINGIFY(name) << __Xc('(') << type << __Xc(')'); break
 
 LogHelper::LogHelper()
 	: m_nLineCount(0)
@@ -1148,6 +1151,157 @@ void LogHelper::GetXloperErrName(XLOPER_ERRTYPE type, std::wstring& str)
 	str = stream.str();
 }
 
+void LogHelper::GetGetCellAttrName(int type, std::wstring& str)
+{
+	enum GetCellFunctions
+	{
+		fAddress = 1,
+		fRow,
+		fColumn,
+		fValueType,
+		fValue,
+		fFormulaInDefaultStyle,
+		fNumberFormat,
+		fHorizontalAlignment,
+		fLeftBordersStyle,
+		fRightBordersStyle,
+		fTopBordersStyle,
+		fBottomBordersStyle,
+		fPattern,
+		fLocked,
+		fFormulaHidden,
+		fIsStandardWidth,
+		fRowHeight,
+		fFontName,
+		fFontSize,
+		fFontBold,
+		fFontItalic,
+		fFontHasUnderline,
+		fFontStrikethrough,
+		fFontColorIndex,
+		fFontOutlineFont,
+		fFontShadow,
+		fManualPageBreakType,
+		fRowOutlineLevel,
+		fColOutlineLevel,
+		fRowSummary,
+		fColumnSummary,
+		fLocation,
+		fWrapText,
+		fLeftBorderColorIndex,
+		fRightBorderColorIndex,
+		fTopBorderColorIndex,
+		fBottomBordersColorIndex,
+		fPatternColorIndex,
+		fColorIndex,
+		fStyleName,
+		fFormulaLocal,
+		fLeftPosition,
+		fTopPosition,
+		fRightPosition,
+		fBottomPosition,
+		fHasNoteText,
+		fContainsSoundNote,
+		fHasFormula,
+		fHasArray,
+		fVerticalAlignment,
+		fOrientation,
+		fPrefixCharacter,
+		fText,
+		fPivotTableName,
+		fLocationInTable,
+		fPivotFieldName,
+		fFontSuperscript,
+		fFontFontStyle,
+		fFontUnderline,
+		fFontSubscript,
+		fPivotItemName,
+		fBookSheetName,
+		fColor,
+		fPatternColor,
+		fAddIndent,
+		fBookName,
+	};
+
+	std::wstringstream stream;
+	switch (type)
+	{
+		InvokeGet(Address);
+		InvokeGet(Row);
+		InvokeGet(Column);
+		InvokeGet(ValueType);
+		InvokeGet(Value);
+		InvokeGet(FormulaInDefaultStyle);
+		InvokeGet(NumberFormat);
+		InvokeGet(HorizontalAlignment);
+		InvokeGet(LeftBordersStyle);
+		InvokeGet(RightBordersStyle);
+		InvokeGet(TopBordersStyle);
+		InvokeGet(BottomBordersStyle);
+		InvokeGet(Pattern);
+		InvokeGet(Locked);
+		InvokeGet(FormulaHidden);
+		InvokeGet(IsStandardWidth);
+		InvokeGet(RowHeight);
+		InvokeGet(FontName);
+		InvokeGet(FontSize);
+		InvokeGet(FontBold);
+		InvokeGet(FontItalic);
+		InvokeGet(FontHasUnderline);
+		InvokeGet(FontStrikethrough);
+		InvokeGet(FontColorIndex);
+		InvokeGet(FontOutlineFont);
+		InvokeGet(FontShadow);
+		InvokeGet(ManualPageBreakType);
+		InvokeGet(RowOutlineLevel);
+		InvokeGet(ColOutlineLevel);
+		InvokeGet(RowSummary);
+		InvokeGet(ColumnSummary);
+		InvokeGet(Location);
+		InvokeGet(WrapText);
+		InvokeGet(LeftBorderColorIndex);
+		InvokeGet(RightBorderColorIndex);
+		InvokeGet(TopBorderColorIndex);
+		InvokeGet(BottomBordersColorIndex);
+		InvokeGet(PatternColorIndex);
+		InvokeGet(ColorIndex);
+		InvokeGet(StyleName);
+		InvokeGet(FormulaLocal);
+		InvokeGet(LeftPosition);
+		InvokeGet(TopPosition);
+		InvokeGet(RightPosition);
+		InvokeGet(BottomPosition);
+		InvokeGet(HasNoteText);
+		InvokeGet(ContainsSoundNote);
+		InvokeGet(HasFormula);
+		InvokeGet(HasArray);
+		InvokeGet(VerticalAlignment);
+		InvokeGet(Orientation);
+		InvokeGet(PrefixCharacter);
+		InvokeGet(Text);
+		InvokeGet(PivotTableName);
+		InvokeGet(LocationInTable);
+		InvokeGet(PivotFieldName);
+		InvokeGet(FontSuperscript);
+		InvokeGet(FontFontStyle);
+		InvokeGet(FontUnderline);
+		InvokeGet(FontSubscript);
+		InvokeGet(PivotItemName);
+		InvokeGet(BookSheetName);
+		InvokeGet(Color);
+		InvokeGet(PatternColor);
+		InvokeGet(AddIndent);
+		InvokeGet(BookName);
+	default:
+		if (str.empty())
+			stream << type;
+		else
+			stream << str;
+		break;
+	}
+	str = stream.str();
+}
+
 void LogHelper::GetPascalString(LPCSTR pStr, std::wstring& result)
 {
 	result.clear();
@@ -1164,6 +1318,77 @@ void LogHelper::GetPascalString(LPCSTR pStr, std::wstring& result)
 		}
 		free(pNewStr);
 	}
+}
+
+const std::wstring& LogHelper::GetBookSheetName(IDSHEET idSheet)
+{
+	auto iter = m_docNameCache.find(idSheet);
+	if (m_docNameCache.end() == iter || 0 == idSheet)
+	{
+		int res = xlretFailed;
+		if (Real_MdCallBack12)
+		{
+			xloper12 operType = { 0 };
+			operType.xltype = xltypeInt;
+			operType.val.w = 62;
+
+			xloper12 operRef = { 0 };
+			XLMREF12 mref = { 0 };
+			operRef.xltype = xltypeRef;
+			operRef.val.mref.idSheet = idSheet;
+			operRef.val.mref.lpmref = &mref;
+			mref.count = 1;
+			mref.reftbl[0].rwFirst = 0;
+			mref.reftbl[0].rwLast = 0;
+			mref.reftbl[0].colFirst = 0;
+			mref.reftbl[0].colLast = 0;
+
+			LPXLOPER12 arg[] = { &operType, &operRef };
+			xloper12 operRes = { 0 };
+			res = Real_MdCallBack12(xlcall::xlfGetCell, 2, arg, &operRes);
+
+			if (xlretSuccess == res && xltypeStr == (XLOPERTYPE)(XLOPER_TYPEMASK & operRes.xltype))
+				GetPascalString(operRes.val.str, m_docNameCache[idSheet]);
+
+			arg[0] = &operRes;
+			res = Real_MdCallBack12(xlcall::xlFree, 1, arg, nullptr);
+		}
+		else if (Real_MdCallBack)
+		{
+			xloper operType = { 0 };
+			operType.xltype = xltypeInt;
+			operType.val.w = 62;
+
+			xloper operRef = { 0 };
+			XLMREF mref = { 0 };
+			operRef.xltype = xltypeRef;
+			operRef.val.mref.idSheet = idSheet;
+			operRef.val.mref.lpmref = &mref;
+			mref.count = 1;
+			mref.reftbl[0].rwFirst = 0;
+			mref.reftbl[0].rwLast = 0;
+			mref.reftbl[0].colFirst = 0;
+			mref.reftbl[0].colLast = 0;
+
+			LPXLOPER arg[] = { &operType, &operRef };
+			xloper operRes = { 0 };
+			res = Real_MdCallBack(xlcall::xlfGetCell, 2, arg, &operRes);
+
+			if (xlretSuccess == res && xltypeStr == (XLOPERTYPE)(XLOPER_TYPEMASK & operRes.xltype))
+				GetPascalString(operRes.val.str, m_docNameCache[idSheet]);
+
+			arg[0] = &operRes;
+			res = Real_MdCallBack(xlcall::xlFree, 1, arg, nullptr);
+		}
+
+		if (xlretSuccess != res)
+		{
+			WCHAR buff[255];
+			swprintf_s(buff, __X("Sheet(0x%08x)"), idSheet);
+			m_docNameCache[idSheet] = buff;
+		}
+	}
+	return m_docNameCache[idSheet];
 }
 
 void LogHelper::StrToWStr(LPCSTR pStr, std::wstring& result)
@@ -1202,6 +1427,33 @@ BOOL LogHelper::WStrToStr(const std::wstring& wstr, std::string& str)
 		return TRUE;
 	}
 	return FALSE;
+}
+
+LPCWSTR LogHelper::ColNumToStr(COL col)
+{
+	const unsigned int buffSize = 6;
+	static WCHAR buff[buffSize];
+	memset(buff, 0, buffSize);
+
+	++col;
+	WCHAR* pch = &buff[buffSize - 1];
+	while (col > 0)
+	{
+		--col;
+		*(--pch) = __Xc('A') + col % 26;
+		col /= 26;
+	}
+
+	size_t uLen = buffSize - (pch - buff) - 1;
+	if (pch > buff)
+	{
+		for (size_t i = 0; i <= uLen; ++i, ++pch)
+		{
+			buff[i] = *pch;
+		}
+	}
+
+	return buff;
 }
 
 void LogHelper::GetPascalString(LPCWSTR lpStr, std::wstring& result)

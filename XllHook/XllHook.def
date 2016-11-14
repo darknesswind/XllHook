@@ -13,3 +13,4 @@ EXPORTS
 	XllOpenFolder
 	XllPauseLog
 	XllResumeLog
+	XllTest

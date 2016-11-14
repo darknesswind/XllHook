@@ -4,21 +4,24 @@
 #include <framewrk.h>
 #include "loghelper.h"
 #include "ExcelProcxy.h"
+#include "xllhook.h"
 #define __CreateMenu 1
 
-static const UINT uRegFuncCount = 4;
+static const UINT uRegFuncCount = 5;
 static LPWSTR rgFuncs[uRegFuncCount][7] = {
-	{ L"XllClearLog", L"I", L"XllClearLog" },
-	{ L"XllOpenFolder", L"I", L"XllOpenFolder" },
-	{ L"XllPauseLog", L"I", L"XllPauseLog" },
-	{ L"XllResumeLog", L"I", L"XllResumeLog" },
+	{ L"XllClearLog",	L"I",	L"XllClearLog" },
+	{ L"XllOpenFolder",	L"I",	L"XllOpenFolder" },
+	{ L"XllPauseLog",	L"I",	L"XllPauseLog" },
+	{ L"XllResumeLog",	L"I",	L"XllResumeLog" },
+	{ L"XllTest",		L"JJ",	L"XllTest" },
 };
 
 static LPSTR rgFuncs4[uRegFuncCount][7] = {
-	{ "XllClearLog",	"I", "XllClearLog" },
-	{ "XllOpenFolder",	"I", "XllOpenFolder" },
-	{ "XllPauseLog",	"I", "XllPauseLog" },
-	{ "XllResumeLog",	"I", "XllResumeLog" },
+	{ "XllClearLog",	"I",	"XllClearLog" },
+	{ "XllOpenFolder",	"I",	"XllOpenFolder" },
+	{ "XllPauseLog",	"I",	"XllPauseLog" },
+	{ "XllResumeLog",	"I",	"XllResumeLog" },
+	{ "XllTest",		"JJ",	"XllTest" },
 };
 
 #define g_rgMenuRows 5
@@ -70,6 +73,11 @@ __declspec(dllexport) short WINAPI XllResumeLog(void)
 {
 	LogHelper::Instance().ResumeLog();
 	return 1;
+}
+
+__declspec(dllexport) int WINAPI XllTest(int val)
+{
+	return val;
 }
 
 void Excel4AutoOpen();
@@ -134,6 +142,7 @@ void Excel4AutoOpen()
 		GlobalUnlock(hMenu);
 		GlobalFree(hMenu);
 	}
+	Excel4(xlcall::xlFree, 0, 1, (LPXLOPER)&xTest);
 #endif
 }
 
@@ -183,6 +192,7 @@ void Excel12AutoOpen()
 		GlobalUnlock(hMenu);
 		GlobalFree(hMenu);
 	}
+	Excel12f(xlcall::xlFree, 0, 1, (LPXLOPER12)&xTest);
 #endif
 }
 
@@ -295,8 +305,13 @@ __declspec(dllexport) LPXLOPER12 WINAPI xlAddInManagerInfo12(LPXLOPER12 xAction)
 	{
 		xInfo.xltype = xltypeStr;
 #ifdef _DEBUG
-		xInfo.val.str = L"\014!!!!!DBGHOOK";
-// 		xInfo.val.str = L"\tFixWndTxt";
+#	if SET_Hook_XLLExport
+		xInfo.val.str = L"\014!FullDbgHook";
+#	elif SET_Hook_XLL
+		xInfo.val.str = L"\014!!!!!XLLHOOK";
+#	else
+		xInfo.val.str = L"\014!!!OTHERHOOK";
+#	endif
 #else
 		xInfo.val.str = L"\014!!!!!XLLHOOK";
 #endif

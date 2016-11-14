@@ -28,10 +28,22 @@ void LogHelper::LogFunctionBegin(int xlfn, int coper, LPOperType *rgpxloper)
 			LogXloper(rgpxloper[i], buffer.argsOperType.back(), buffer.argsOperValue.back());
 		}
 
-		if (xlcall::xlCoerce == nFunc && buffer.argsOperValue.size() >= 2)
+		switch (nFunc)
 		{
-			int nOperType = _wtoi(buffer.argsOperValue[1].c_str());
-			GetXloperTypeName(nOperType, buffer.argsOperValue[1]);
+		case xlcall::xlCoerce:
+			if (buffer.argsOperValue.size() >= 2)
+			{
+				int nOperType = _wtoi(buffer.argsOperValue[1].c_str());
+				GetXloperTypeName(nOperType, buffer.argsOperValue[1]);
+			}
+		case xlcall::xlfGetCell:
+			if (buffer.argsOperValue.size() >= 1)
+			{
+				int attrType = _wtoi(buffer.argsOperValue[0].c_str());
+				GetGetCellAttrName(attrType, buffer.argsOperValue[0]);
+			}
+		default:
+			break;
 		}
 	}
 }
@@ -130,20 +142,18 @@ void LogHelper::LogXloper(LPOperType lpOper, std::wstring& sType, std::wstring& 
 template <class XLRefType>
 void LogHelper::LogSingleRef(const XLRefType& sref, std::wstringstream& stream)
 {
-	stream << __Xc('R') << sref.rwFirst + 1
-		<< __Xc('C') << sref.colFirst + 1;
+	stream << ColNumToStr(sref.colFirst) << sref.rwFirst + 1;
 
 	if (sref.rwFirst != sref.rwLast || sref.colFirst != sref.colLast)
 	{
-		stream << __X(":R")	<< sref.rwLast + 1
-			<< __Xc('C') << sref.colLast + 1;
+		stream << __Xc(':')	<< ColNumToStr(sref.colLast) << sref.rwLast + 1;
 	}
 }
 
 template <class XLMRefType>
 void LogHelper::LogReferences(IDSHEET iSheet, const XLMRefType* lpmref, std::wstringstream& stream)
 {
-	stream << __X("Sheet(0x") << std::hex << iSheet << __X(")!") << std::dec;
+	stream << GetBookSheetName(iSheet) << __Xc('!');
 	if (lpmref)
 	{
 		for (int i = 0; i < lpmref->count; ++i)
@@ -166,9 +176,8 @@ void LogHelper::LogXloperFlow(LPOperType lpOper, std::wstringstream& stream)
 		stream << __X("Halt");
 		break;
 	case xlflowGoto:
-		stream << __X("Goto Sheet(0x") << std::hex
-			<< lpOper->val.flow.valflow.idSheet << std::dec
-			<< __Xc(")!R") << lpOper->val.flow.rw + 1
+		stream << __X("Goto ") << GetBookSheetName(lpOper->val.flow.valflow.idSheet)
+			<< __Xc("!R") << lpOper->val.flow.rw + 1
 			<< __Xc('C') << lpOper->val.flow.col + 1;
 		break;
 	case xlflowRestart:

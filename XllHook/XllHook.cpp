@@ -92,6 +92,22 @@ LRESULT(__stdcall *Real_DefWindowProcW)(_In_ HWND hWnd, _In_ UINT Msg, _In_ WPAR
 	= DefWindowProcW;
 BOOL(__stdcall *Real_GetTextMetricsW)(__in HDC hdc, __out LPTEXTMETRICW lptm)
 	= GetTextMetricsW;
+BOOL(__stdcall *Real_ExtTextOutW)(__in HDC hdc, __in int x, __in int y, __in UINT options, __in_opt CONST RECT * lprect, __in_ecount_opt(c) LPCWSTR lpString, __in UINT c, __in_ecount_opt(c) CONST INT * lpDx)
+	= ExtTextOutW;
+HGDIOBJ (__stdcall *Real_SelectObject)(__in HDC hdc, __in HGDIOBJ h)
+	= SelectObject;
+BOOL(__stdcall *Real_SetWindowPos)(__in HWND hWnd, __in_opt HWND hWndInsertAfter, __in int X, __in int Y, __in int cx, __in int cy, __in UINT uFlags)
+	= SetWindowPos;
+LPVOID(__stdcall *Real_HeapAlloc)(_In_ HANDLE hHeap, _In_ DWORD dwFlags, _In_ SIZE_T dwBytes)
+	= HeapAlloc;
+BOOL(__stdcall *Real_PostMessageA)(_In_opt_ HWND hWnd, _In_ UINT Msg, _In_ WPARAM wParam, _In_ LPARAM lParam)
+	= PostMessageA;
+BOOL (__stdcall *Real_PostMessageW)(_In_opt_ HWND hWnd, _In_ UINT Msg, _In_ WPARAM wParam, _In_ LPARAM lParam)
+	= PostMessageW;
+LRESULT (__stdcall *Real_SendMessageA)(_In_ HWND hWnd, _In_ UINT Msg, _Pre_maybenull_ _Post_valid_ WPARAM wParam, _Pre_maybenull_ _Post_valid_ LPARAM lParam)
+	= SendMessageA;
+LRESULT (__stdcall *Real_SendMessageW)(_In_ HWND hWnd, _In_ UINT Msg, _Pre_maybenull_ _Post_valid_ WPARAM wParam, _Pre_maybenull_ _Post_valid_ LPARAM lParam)
+	= SendMessageW;
 
 FARPROC __stdcall Mine_GetProcAddress(HMODULE hModule, LPCSTR lpProcName);
 SHORT __stdcall Mine_GetAsyncKeyState(_In_ int vKey);
@@ -106,6 +122,14 @@ BOOL __stdcall Mine_SetWindowTextW(_In_ HWND hWnd, _In_opt_ LPCWSTR lpString);
 LRESULT __stdcall Mine_DefWindowProcA(_In_ HWND hWnd, _In_ UINT Msg, _In_ WPARAM wParam, _In_ LPARAM lParam);
 LRESULT __stdcall Mine_DefWindowProcW(_In_ HWND hWnd, _In_ UINT Msg, _In_ WPARAM wParam, _In_ LPARAM lParam);
 BOOL __stdcall Mine_GetTextMetricsW(__in HDC hdc, __out LPTEXTMETRICW lptm);
+BOOL __stdcall Mine_ExtTextOutW(__in HDC hdc, __in int x, __in int y, __in UINT options, __in_opt CONST RECT * lprect, __in_ecount_opt(c) LPCWSTR lpString, __in UINT c, __in_ecount_opt(c) CONST INT * lpDx);
+HGDIOBJ __stdcall Mine_SelectObject(__in HDC hdc, __in HGDIOBJ h);
+BOOL __stdcall Mine_SetWindowPos(__in HWND hWnd, __in_opt HWND hWndInsertAfter, __in int X, __in int Y, __in int cx, __in int cy, __in UINT uFlags);
+LPVOID __stdcall Mine_HeapAlloc(_In_ HANDLE hHeap, _In_ DWORD dwFlags, _In_ SIZE_T dwBytes);
+BOOL __stdcall Mine_PostMessageA(_In_opt_ HWND hWnd, _In_ UINT Msg, _In_ WPARAM wParam, _In_ LPARAM lParam);
+BOOL __stdcall Mine_PostMessageW(_In_opt_ HWND hWnd, _In_ UINT Msg, _In_ WPARAM wParam, _In_ LPARAM lParam);
+LRESULT __stdcall Mine_SendMessageA(_In_ HWND hWnd, _In_ UINT Msg, _Pre_maybenull_ _Post_valid_ WPARAM wParam, _Pre_maybenull_ _Post_valid_ LPARAM lParam);
+LRESULT __stdcall Mine_SendMessageW(_In_ HWND hWnd, _In_ UINT Msg, _Pre_maybenull_ _Post_valid_ WPARAM wParam, _Pre_maybenull_ _Post_valid_ LPARAM lParam);
 
 ProcMdCallBack MdCallBack = NULL;
 ProcMdCallBack12 MdCallBack12 = NULL;
@@ -488,7 +512,15 @@ LONG AttachDetours(VOID)
 // 	ATTACH(SysReAllocString);
 // 	ATTACH(SysAllocStringLen);
 // 	ATTACH(SysReAllocStringLen);
-	ATTACH(GetTextMetricsW);
+// 	ATTACH(GetTextMetricsW);
+//	ATTACH(ExtTextOutW);
+// 	ATTACH(HeapAlloc);
+// 	ATTACH(SelectObject);
+// 	ATTACH(SetWindowPos);
+//  ATTACH(PostMessageA);
+// 	ATTACH(PostMessageW);
+// 	ATTACH(SendMessageA);
+// 	ATTACH(SendMessageW);
 #endif
 	if (DetourTransactionCommit() != NO_ERROR) {
 		OutputDebugStringA("AttachDetours failed on DetourTransactionCommit\n");
@@ -535,7 +567,15 @@ LONG DetachDetours(VOID)
 // 	DETACH(SysReAllocString);
 // 	DETACH(SysAllocStringLen);
 // 	DETACH(SysReAllocStringLen);
- 	DETACH(GetTextMetricsW);
+//  DETACH(GetTextMetricsW);
+//	DETACH(ExtTextOutW);
+// 	DETACH(HeapAlloc);
+// 	DETACH(SelectObject);
+// 	DETACH(SetWindowPos);
+// 	DETACH(PostMessageA);
+// 	DETACH(PostMessageW);
+// 	DETACH(SendMessageA);
+// 	DETACH(SendMessageW);
 #endif
 	if (DetourTransactionCommit() != 0) {
 		PVOID *ppbFailedPointer = NULL;
@@ -592,6 +632,8 @@ void DetachFunction(PVOID *ppvReal, PVOID pvMine, PCHAR psz)
 	}
 }
 
+#pragma region WindowsApi
+
 FARPROC __stdcall Mine_GetProcAddress(HMODULE hModule, LPCSTR lpProcName)
 {
 	FARPROC rv = 0;
@@ -630,7 +672,7 @@ bool IsTarget(BSTR bstrString)
 	const WCHAR* target1 = L"DESSeal.DESSealObj.1";
 	if (!IsBadReadPtr(bstrString, sizeof(void*)))
 	{
-		return (0 == wcsicmp(target1, bstrString));
+		return (0 == _wcsicmp(target1, bstrString));
 	}
 	return false;
 }
@@ -769,12 +811,146 @@ LRESULT __stdcall Mine_DefWindowProcW(_In_ HWND hWnd, _In_ UINT Msg, _In_ WPARAM
 BOOL __stdcall Mine_GetTextMetricsW(__in HDC hdc, __out LPTEXTMETRICW lptm)
 {
 	BOOL res = Real_GetTextMetricsW(hdc, lptm);
+	return res;
 	static int ascOff = 0;
 	static int desOff = 0;
+	static int extOff = 0;
+	static int intOff = 0;
+	if (res)
+	{
+		int nDPI = GetDeviceCaps(hdc, LOGPIXELSY);
+		double fDesktopUintPerPels = 15;	// 96 dpi
+		double fDeviceUintPerPels = static_cast<double>(1440 * 1.0 / nDPI);
+		double nRate = fDesktopUintPerPels / fDeviceUintPerPels;
 
-	ASSERT(lptm->tmAscent + lptm->tmDescent == lptm->tmHeight);
-	lptm->tmAscent += ascOff;
-	lptm->tmDescent += desOff;
-	lptm->tmHeight = lptm->tmAscent + lptm->tmDescent;
+		static WCHAR fontName[255];
+		GetTextFaceW(hdc, 255, fontName);
+
+		ASSERT(lptm->tmAscent + lptm->tmDescent == lptm->tmHeight);
+		lptm->tmAscent += ascOff;
+		lptm->tmDescent += desOff;
+		lptm->tmHeight = lptm->tmAscent + lptm->tmDescent;
+		lptm->tmExternalLeading += extOff;
+		lptm->tmInternalLeading += intOff;
+
+		if (lptm->tmAscent == 75)
+		{
+			return res;
+		}
+	}
+	return res;
 }
 
+BOOL __stdcall Mine_ExtTextOutW(
+	__in HDC hdc, __in int x, __in int y,
+	__in UINT options, __in_opt CONST RECT * lprect,
+	__in_ecount_opt(c) LPCWSTR lpString, __in UINT c, __in_ecount_opt(c) CONST INT * lpDx)
+{
+// 	const UINT firstLine = 0x91cd3000;
+// 	const UINT secondLine = 0x66f87d04;
+	const UINT firstLine = *(UINT*)&L"LL";
+	const UINT secondLine = *(UINT*)&L"AA";
+
+	if (!IsBadReadPtr(lpString, sizeof(LPCWSTR)) &&
+		!IsBadReadPtr(lprect, sizeof(RECT *)))
+	{
+
+		const WCHAR* lpTarget = L"1999.07";
+		if (0 == memcmp(lpString, lpTarget, 7))
+		{
+			TEXTMETRICW tm = { 0 };
+			GetTextMetricsW(hdc, &tm);
+			OUTLINETEXTMETRIC olMetric = { 0 };
+			GetOutlineTextMetricsW(hdc, sizeof(olMetric), &olMetric);
+			static WCHAR nameBuff[255];
+			GetTextFaceW(hdc, 255, nameBuff);
+
+			static WCHAR buff[255];
+			swprintf_s(buff, L"Height(%d) MaxWidth(%d) Name(%s)\n\0",
+				tm.tmHeight, olMetric.otmSize, nameBuff);
+			OutputDebugStringW(buff);
+		}
+	}
+	return Real_ExtTextOutW(hdc, x, y, options, lprect, lpString, c, lpDx);
+}
+
+HGDIOBJ __stdcall Mine_SelectObject(__in HDC hdc, __in HGDIOBJ h)
+{
+#define PrintCase(name) case name: OutputDebugStringA( #name "\n"); break;
+	DWORD objType = GetObjectType(h);
+	switch (objType)
+	{
+		PrintCase(OBJ_BITMAP);
+		PrintCase(OBJ_BRUSH);
+		PrintCase(OBJ_COLORSPACE);
+		PrintCase(OBJ_DC);
+		PrintCase(OBJ_ENHMETADC);
+		PrintCase(OBJ_ENHMETAFILE);
+		PrintCase(OBJ_EXTPEN);
+		PrintCase(OBJ_FONT);
+		PrintCase(OBJ_MEMDC);
+		PrintCase(OBJ_METAFILE);
+		PrintCase(OBJ_METADC);
+		PrintCase(OBJ_PAL);
+		PrintCase(OBJ_PEN);
+		PrintCase(OBJ_REGION);
+	default:
+		break;
+	}
+	return Real_SelectObject(hdc, h);
+}
+
+BOOL __stdcall Mine_SetWindowPos(__in HWND hWnd, __in_opt HWND hWndInsertAfter, __in int X, __in int Y, __in int cx, __in int cy, __in UINT uFlags)
+{
+	return Real_SetWindowPos(hWnd, hWndInsertAfter, X, Y, cx, cy, uFlags);
+}
+
+LPVOID __stdcall Mine_HeapAlloc(_In_ HANDLE hHeap, _In_ DWORD dwFlags, _In_ SIZE_T dwBytes)
+{
+	static LPVOID lpBegin = 0;
+	static LPVOID lpEnd = 0;
+	LPVOID lpRes = Real_HeapAlloc(hHeap, dwFlags, dwBytes);
+	if (lpBegin <= lpRes && lpRes <= lpEnd)
+	{
+		static UINT i = 0;
+		++i;
+	}
+	return lpRes;
+}
+
+BOOL __stdcall Mine_PostMessageA(_In_opt_ HWND hWnd, _In_ UINT Msg, _In_ WPARAM wParam, _In_ LPARAM lParam)
+{
+	if (Msg == 2224 || Msg == 2225)
+	{
+		OutputDebugStringA("hint");
+	}
+	return Real_PostMessageA(hWnd, Msg, wParam, lParam);
+}
+BOOL __stdcall Mine_PostMessageW(_In_opt_ HWND hWnd, _In_ UINT Msg, _In_ WPARAM wParam, _In_ LPARAM lParam)
+{
+	if (Msg == 2224 || Msg == 2225)
+	{
+		OutputDebugStringA("hint");
+	}
+	return Real_PostMessageW(hWnd, Msg, wParam, lParam);
+}
+
+LRESULT __stdcall Mine_SendMessageA(_In_ HWND hWnd, _In_ UINT Msg, _Pre_maybenull_ _Post_valid_ WPARAM wParam, _Pre_maybenull_ _Post_valid_ LPARAM lParam)
+{
+	if (Msg == 2224 || Msg == 2225)
+	{
+		OutputDebugStringA("hint");
+	}
+	return Real_SendMessageA(hWnd, Msg, wParam, lParam);
+}
+
+LRESULT __stdcall Mine_SendMessageW(_In_ HWND hWnd, _In_ UINT Msg, _Pre_maybenull_ _Post_valid_ WPARAM wParam, _Pre_maybenull_ _Post_valid_ LPARAM lParam)
+{
+	if (Msg == 2224 || Msg == 2225)
+	{
+		OutputDebugStringA("hint");
+	}
+	return Real_SendMessageW(hWnd, Msg, wParam, lParam);
+}
+
+#pragma endregion
